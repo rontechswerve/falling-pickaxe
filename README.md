@@ -10,7 +10,7 @@ https://www.youtube.com/watch?v=gcjeidHWEb4
 </div>
 
 ## Before you use it
-If you consider streaming this game on your own youtube channel, please add credits in the description of your video/livestream. Credits should inclue a link to this repository and [a link to my youtube channel.](https://www.youtube.com/@vycdev)
+If you consider streaming this game (Instagram Live or anywhere else), please add credits in the description of your video/livestream. Credits should inclue a link to this repository and [a link to my youtube channel.](https://www.youtube.com/@vycdev)
 
 Copy paste example:
 ```
@@ -44,6 +44,18 @@ These scripts will automatically:
 - Run the game with automatic restart on crashes
 - Exit cleanly when you close the game window
 
+### Updating to the latest version
+The scripts above will keep dependencies updated, but they **won't download new code for you**. To get the newest features and bug fixes:
+
+1. If you cloned with Git, run:
+   ```
+   git pull
+   ```
+   Then re-run `./scripts/run.ps1` (Windows) or `./scripts/run.sh` (Linux/macOS). The scripts will reinstall any new dependencies automatically.
+2. If you downloaded a ZIP, download the latest ZIP from GitHub again and replace your old folder, then run the script for your platform.
+
+Your `config.json` will remain untouched, but if new settings are added they default to the values in `default.config.json`. Copy over new options as needed.
+
 ### Manual Setup (Advanced Users)
 If you prefer to set up the environment manually:
 
@@ -66,16 +78,29 @@ If you prefer to set up the environment manually:
    ```
 
 ### Configuration (Optional)
-1. Make a copy of `default.config.json` to `config.json` or run the game once to automatically copy the config file into `config.json`
-2. Create your Google API Key for YouTube.
-3. Enable the YouTube Data API v3 for your Google Cloud Project.
-4. Enter your credentials in the configuration file.
-5. Set your youtube channel id and livestream id in the configuration file.
-6. Change configuration to your liking
+1. Make a copy of `default.config.json` to `config.json` or run the game once to automatically copy the config file into `config.json`.
+2. Set `CHAT_CONTROL` to `true` if you want Instagram Live chat to drive game events.
+3. Fill in the Instagram fields:
+   - `INSTAGRAM_USER_ID`: the IG user ID that owns the live broadcast.
+   - `INSTAGRAM_LIVE_MEDIA_ID`: optional fallback broadcast ID if you want to force a specific live session.
+   - `INSTAGRAM_ACCESS_TOKEN`: a long-lived Instagram user token with the permissions required by the Instagram Graph API.
+4. Adjust the remaining intervals and queue pop timings as desired.
 
 **Note:** The automated scripts (`run.ps1` and `run.sh`) will run the game and restart it in case of unexpected crashes. When you close the game window normally, the script will exit cleanly. This is perfect for unattended streams.
 
-Steps 2 to 6 are **optional**. You can disable the entire YouTube integration by setting the property: `"CHAT_CONTROL": false`
+Steps 2 to 4 are **optional**. You can disable the entire Instagram integration by setting the property: `"CHAT_CONTROL": false`.
+
+### Instagram Live setup (using Instagram Login)
+The YouTube polling logic has been replaced with Instagram Live comment polling. To wire it up with your Instagram account:
+
+1. Create a Meta app and enable **Instagram Graph API** with Instagram Login for your app, as described in the official guide: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login
+2. Ensure your Instagram account is a **Business** or **Creator** account linked to a Facebook Page (required for the Graph API).
+3. Obtain a short-lived Instagram user access token via Instagram Login, then exchange it for a **long-lived user token** (valid up to 60 days) using the same guide. Place this token in `INSTAGRAM_ACCESS_TOKEN`.
+4. Query your Instagram user ID (for example with the Graph API `me?fields=id,username`) and place it in `INSTAGRAM_USER_ID`.
+5. Start an Instagram Live broadcast. The game will call the Live Media endpoint (https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/live_media/) to locate the active broadcast and then poll `/{live_media_id}/live_comments` for chat messages.
+6. If you prefer to hardcode a specific live media ID instead of auto-detection, copy it from your live session and place it in `INSTAGRAM_LIVE_MEDIA_ID`.
+
+Once configured, every Instagram Live comment will spawn a TNT in-game with the commenter’s display name, message, and profile picture attached.
 
 ### Available chat commands
 ```
@@ -98,10 +123,8 @@ netherite
 
 Extra details about when a MegaTNT appears in the game:
 
-- New subscribers are detected by periodically polling YouTube for the channel's subscriber count. When an increase is detected the game appends an entry to the `mega_tnt_queue` (the string `"New Subscriber"`) and the MegaTNT will be spawned when the queues are processed.
-- Queue processing happens every `QUEUES_POP_INTERVAL_SECONDS` (see `default.config.json` / `config.json`). Polling frequency for YouTube is controlled by `YT_POLL_INTERVAL_SECONDS`.
-- Requirements for automatic MegaTNT spawning: `CHAT_CONTROL` must be `true`, a valid `live_chat_id` and `CHANNEL_ID` must be configured so the game can read subscriber counts.
-- The queued owner name is currently the literal string `"New Subscriber"` (not the subscriber's username). You can change this behavior in code if you want actual usernames used.
+- Instagram chat messages that contain `megatnt` enqueue a MegaTNT with the chatter’s display name, message, and avatar attached.
+- Queue processing happens every `QUEUES_POP_INTERVAL_SECONDS` (see `default.config.json` / `config.json`). Polling frequency for Instagram is controlled by `INSTAGRAM_POLL_INTERVAL_SECONDS`.
 - You can also spawn a MegaTNT manually in-game by pressing the `M` key — this spawns immediately (no queue).
 - MegaTNTs use a larger explosion radius, detonate automatically ~4 seconds after spawn, and trigger a stronger camera shake.
 
