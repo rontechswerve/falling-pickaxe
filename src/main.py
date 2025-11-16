@@ -107,17 +107,19 @@ async def handle_youtube_poll():
             "profile_image_url": profile_image_url,
         }
 
-        # Check for "tnt" command (add author to regular tnt_queue) - Only English "tnt"
-        if "tnt" in text_lower:
-            if author_id not in [entry["author_id"] for entry in tnt_queue]:
-                tnt_queue.append(chat_payload)
-                print(f"Added {author} to regular TNT queue")
+        # Every chat message spawns at least one TNT with metadata for the overlay
+        tnt_queue.append({**chat_payload, "highlight": "tnt" if "tnt" in text_lower else None})
+        print(f"Queued TNT for chat message from {author}")
 
-        # Check for Superchat/Supersticker (add to superchat tnt queue)
+        # Check for MegaTNT keyword
+        if "megatnt" in text_lower:
+            mega_tnt_queue.append({**chat_payload, "highlight": "megatnt"})
+            print(f"Added {author} to MegaTNT queue (keyword)")
+
+        # Check for Superchat/Supersticker (add to mega tnt queue for 10x MegaTNT)
         if is_superchat or is_supersticker:
-            if author_id not in [entry["author_id"] for entry in tnt_superchat_queue]:
-                 tnt_superchat_queue.append(chat_payload)
-                 print(f"Added {author} to Superchat TNT queue")
+            tnt_superchat_queue.append({**chat_payload, "highlight": "megatnt"})
+            print(f"Added {author} to Superchat MegaTNT queue")
 
         if "fast" in text_lower and author_id not in [entry["author_id"] for entry in fast_slow_queue]:
             fast_slow_queue.append({"author_id": author_id, "display_name": author, "choice": "Fast"})
@@ -383,7 +385,7 @@ def game():
             if tnt_queue:
                 chat_info = tnt_queue.pop(0)
                 author = chat_info["display_name"]
-                print(f"Spawning regular TNT for {author} (from chat command)")
+                print(f"Spawning TNT for {author} (chat message)")
                 new_tnt = Tnt(
                     space,
                     pickaxe.body.position.x,
@@ -397,14 +399,28 @@ def game():
                     owner_id=chat_info.get("author_id"),
                     leaderboard=hud,
                 )
-                hud.mark_command_trigger("tnt")
+                if chat_info.get("highlight"):
+                    hud.mark_command_trigger(chat_info["highlight"])
                 tnt_list.append(new_tnt)
                 last_tnt_spawn = current_time
 
             # Handle MegaTNT (New Subscriber)
             if mega_tnt_queue:
                 author = mega_tnt_queue.pop(0)
-                print(f"Spawning MegaTNT for {author} (New Subscriber)")
+                if isinstance(author, dict):
+                    display_name = author.get("display_name", "New Subscriber")
+                    message = author.get("message")
+                    profile_image_url = author.get("profile_image_url")
+                    author_id = author.get("author_id")
+                    highlight = author.get("highlight")
+                else:
+                    display_name = author
+                    message = None
+                    profile_image_url = None
+                    author_id = str(author)
+                    highlight = "megatnt"
+
+                print(f"Spawning MegaTNT for {display_name} (queue)")
                 new_megatnt = MegaTnt(
                     space,
                     pickaxe.body.position.x,
@@ -412,11 +428,14 @@ def game():
                     texture_atlas,
                     atlas_items,
                     sound_manager,
-                    owner_name=author,
-                    owner_id=str(author),
+                    owner_display_name=display_name,
+                    owner_message=message,
+                    profile_image_url=profile_image_url,
+                    owner_id=author_id,
                     leaderboard=hud,
                 )
-                hud.mark_command_trigger("megatnt")
+                if highlight:
+                    hud.mark_command_trigger(highlight)
                 tnt_list.append(new_megatnt)
                 last_tnt_spawn = current_time
 
@@ -425,11 +444,11 @@ def game():
                 chat_info = tnt_superchat_queue.pop(0)
                 author = chat_info["display_name"]
                 text = chat_info.get("message")
-                print(f"Spawning TNT for {author} (Superchat: {text})")
+                print(f"Spawning MegaTNTs for {author} (Superchat: {text})")
                 last_tnt_spawn = current_time
-                hud.mark_command_trigger("tnt")
-                for _ in range(config["TNT_AMOUNT_ON_SUPERCHAT"]):
-                    new_tnt = Tnt(
+                hud.mark_command_trigger("megatnt")
+                for _ in range(10):
+                    new_megatnt = MegaTnt(
                         space,
                         pickaxe.body.position.x,
                         pickaxe.body.position.y - 100,
@@ -442,7 +461,7 @@ def game():
                         owner_id=chat_info.get("author_id"),
                         leaderboard=hud,
                     )
-                    tnt_list.append(new_tnt)
+                    tnt_list.append(new_megatnt)
 
             # Handle Fast/Slow command
             if fast_slow_queue:

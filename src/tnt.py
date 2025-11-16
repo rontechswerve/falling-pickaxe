@@ -347,11 +347,5 @@ class MegaTnt(Tnt):
         overlay_rect.x -= camera.offset_x
         screen.blit(rotated_overlay, overlay_rect)
 
-        # Draw owner name above MegaTNT
-        if self.owner_name:
-            text_surface = self.font.render(self.owner_name, True, (255, 255, 255))
-            text_rect = text_surface.get_rect(center=(self.body.position.x - camera.offset_x, self.body.position.y - 55 - camera.offset_y))
-            shadow = self.font.render(self.owner_name, True, (0, 0, 0))
-            shadow_rect = shadow.get_rect(center=(self.body.position.x + 1 - camera.offset_x, self.body.position.y - 54 - camera.offset_y))
-            screen.blit(shadow, shadow_rect)
-            screen.blit(text_surface, text_rect)
+        if self.owner_display_name or self.owner_message or self.profile_image_surface:
+            self._draw_chat_overlay(screen, camera)

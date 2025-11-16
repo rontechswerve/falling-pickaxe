@@ -192,7 +192,7 @@ class Hud:
             )
             command_surfaces.append(surface)
 
-        y = 100
+        y = self.spacing // 2
 
         def draw_row(row_surfaces, y_offset):
             if not row_surfaces:
