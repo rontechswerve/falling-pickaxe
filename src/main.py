@@ -323,8 +323,15 @@ def game():
         current_time = pygame.time.get_ticks()
         if (not config["CHAT_CONTROL"] or (not tnt_queue and not tnt_superchat_queue and not mega_tnt_queue)) and current_time - last_tnt_spawn >= tnt_spawn_interval:
              # Example: spawn TNT at position (400, 300) with a given texture
-             new_tnt = Tnt(space, pickaxe.body.position.x, pickaxe.body.position.y - 100,
-               texture_atlas, atlas_items, sound_manager)
+             new_tnt = Tnt(
+                 space,
+                 pickaxe.body.position.x,
+                 pickaxe.body.position.y - 100,
+                 texture_atlas,
+                 atlas_items,
+                 sound_manager,
+                 leaderboard=hud,
+             )
              tnt_list.append(new_tnt)
              last_tnt_spawn = current_time
              # New random interval for the next TNT spawn
@@ -377,11 +384,20 @@ def game():
                 chat_info = tnt_queue.pop(0)
                 author = chat_info["display_name"]
                 print(f"Spawning regular TNT for {author} (from chat command)")
-                new_tnt = Tnt(space, pickaxe.body.position.x, pickaxe.body.position.y - 100,
-                             texture_atlas, atlas_items, sound_manager,
-                             owner_display_name=author,
-                             owner_message=chat_info.get("message"),
-                             profile_image_url=chat_info.get("profile_image_url"))
+                new_tnt = Tnt(
+                    space,
+                    pickaxe.body.position.x,
+                    pickaxe.body.position.y - 100,
+                    texture_atlas,
+                    atlas_items,
+                    sound_manager,
+                    owner_display_name=author,
+                    owner_message=chat_info.get("message"),
+                    profile_image_url=chat_info.get("profile_image_url"),
+                    owner_id=chat_info.get("author_id"),
+                    leaderboard=hud,
+                )
+                hud.mark_command_trigger("tnt")
                 tnt_list.append(new_tnt)
                 last_tnt_spawn = current_time
 
@@ -389,8 +405,18 @@ def game():
             if mega_tnt_queue:
                 author = mega_tnt_queue.pop(0)
                 print(f"Spawning MegaTNT for {author} (New Subscriber)")
-                new_megatnt = MegaTnt(space, pickaxe.body.position.x, pickaxe.body.position.y - 100,
-                      texture_atlas, atlas_items, sound_manager, owner_name=author)
+                new_megatnt = MegaTnt(
+                    space,
+                    pickaxe.body.position.x,
+                    pickaxe.body.position.y - 100,
+                    texture_atlas,
+                    atlas_items,
+                    sound_manager,
+                    owner_name=author,
+                    owner_id=str(author),
+                    leaderboard=hud,
+                )
+                hud.mark_command_trigger("megatnt")
                 tnt_list.append(new_megatnt)
                 last_tnt_spawn = current_time
 
@@ -401,11 +427,21 @@ def game():
                 text = chat_info.get("message")
                 print(f"Spawning TNT for {author} (Superchat: {text})")
                 last_tnt_spawn = current_time
+                hud.mark_command_trigger("tnt")
                 for _ in range(config["TNT_AMOUNT_ON_SUPERCHAT"]):
-                    new_tnt = Tnt(space, pickaxe.body.position.x, pickaxe.body.position.y - 100, texture_atlas, atlas_items, sound_manager,
-                                   owner_display_name=author,
-                                   owner_message=text,
-                                   profile_image_url=chat_info.get("profile_image_url"))
+                    new_tnt = Tnt(
+                        space,
+                        pickaxe.body.position.x,
+                        pickaxe.body.position.y - 100,
+                        texture_atlas,
+                        atlas_items,
+                        sound_manager,
+                        owner_display_name=author,
+                        owner_message=text,
+                        profile_image_url=chat_info.get("profile_image_url"),
+                        owner_id=chat_info.get("author_id"),
+                        leaderboard=hud,
+                    )
                     tnt_list.append(new_tnt)
 
             # Handle Fast/Slow command
@@ -418,6 +454,7 @@ def game():
                 last_fast_slow = current_time
                 fast_slow = q_fast_slow
                 fast_slow_interval = 1000 * random.uniform(config["FAST_SLOW_INTERVAL_SECONDS_MIN"], config["FAST_SLOW_INTERVAL_SECONDS_MAX"])
+                hud.mark_command_trigger(q_fast_slow.lower())
 
             # Handle Big pickaxe command
             if big_queue:
@@ -427,6 +464,7 @@ def game():
                 pickaxe.enlarge(enlarge_duration)
                 last_enlarge = current_time + enlarge_duration
                 enlarge_interval = 1000 * random.uniform(config["PICKAXE_ENLARGE_INTERVAL_SECONDS_MIN"], config["PICKAXE_ENLARGE_INTERVAL_SECONDS_MAX"])
+                hud.mark_command_trigger("big")
 
             # Handle Pickaxe type command
             if pickaxe_queue:
@@ -438,6 +476,15 @@ def game():
                 hud.set_pickaxe_name(pickaxe.display_name())
                 last_random_pickaxe = current_time
                 random_pickaxe_interval = 1000 * random.uniform(config["RANDOM_PICKAXE_INTERVAL_SECONDS_MIN"], config["RANDOM_PICKAXE_INTERVAL_SECONDS_MAX"])
+                pickaxe_command_map = {
+                    "wooden_pickaxe": "wood",
+                    "stone_pickaxe": "stone",
+                    "iron_pickaxe": "iron",
+                    "golden_pickaxe": "gold",
+                    "diamond_pickaxe": "diamond",
+                    "netherite_pickaxe": "netherite",
+                }
+                hud.mark_command_trigger(pickaxe_command_map.get(pickaxe_type, pickaxe_type))
 
 
         # Delete chunks
@@ -508,8 +555,15 @@ def game():
         # Handle TNT spawn (key T)
         if keys[pygame.K_t]:
             if not key_t_pressed:  # Only spawn if the key was not pressed in the previous frame
-                new_tnt = Tnt(space, pickaxe.body.position.x, pickaxe.body.position.y - 100,
-                            texture_atlas, atlas_items, sound_manager)
+                new_tnt = Tnt(
+                    space,
+                    pickaxe.body.position.x,
+                    pickaxe.body.position.y - 100,
+                    texture_atlas,
+                    atlas_items,
+                    sound_manager,
+                    leaderboard=hud,
+                )
                 tnt_list.append(new_tnt)
                 last_tnt_spawn = current_time
                 # New random interval for the next TNT spawn
@@ -521,8 +575,15 @@ def game():
         # Handle MegaTNT spawn (key M)
         if keys[pygame.K_m]:
             if not key_m_pressed:  # Only spawn if the key was not pressed in the previous frame
-                new_megatnt = MegaTnt(space, pickaxe.body.position.x, pickaxe.body.position.y - 100,
-                                    texture_atlas, atlas_items, sound_manager)
+                new_megatnt = MegaTnt(
+                    space,
+                    pickaxe.body.position.x,
+                    pickaxe.body.position.y - 100,
+                    texture_atlas,
+                    atlas_items,
+                    sound_manager,
+                    leaderboard=hud,
+                )
                 tnt_list.append(new_megatnt)
                 last_tnt_spawn = current_time
                 # New random interval for the next TNT spawn

@@ -11,8 +11,24 @@ from explosion import Explosion
 class Tnt:
     avatar_cache = {}
 
-    def __init__(self, space, x, y, texture_atlas, atlas_items, sound_manager, owner_name=None, velocity=0, rotation=0, mass=70,
-                 owner_display_name=None, owner_message=None, profile_image_url=None):
+    def __init__(
+        self,
+        space,
+        x,
+        y,
+        texture_atlas,
+        atlas_items,
+        sound_manager,
+        owner_name=None,
+        velocity=0,
+        rotation=0,
+        mass=70,
+        owner_display_name=None,
+        owner_message=None,
+        profile_image_url=None,
+        owner_id=None,
+        leaderboard=None,
+    ):
         print("Spawning TNT")
         self.texture_atlas = texture_atlas
         self.atlas_items = atlas_items
@@ -52,12 +68,14 @@ class Tnt:
         self.spawn_time = pygame.time.get_ticks()
 
         # Owner info (nick from chat)
+        self.owner_id = owner_id
         self.owner_display_name = owner_display_name or owner_name
         self.owner_message = owner_message
         self.profile_image_url = profile_image_url
         self.profile_image_surface = self._load_profile_image(profile_image_url)
         self.name_font = pygame.font.Font(None, 48)
         self.message_font = pygame.font.Font(None, 36)
+        self.leaderboard = leaderboard
 
     def _load_profile_image(self, image_url):
         if not image_url:
@@ -85,6 +103,8 @@ class Tnt:
         explosion_radius = 3 * BLOCK_SIZE  # Explosion radius in pixels
         self.detonated = True
 
+        blocks_destroyed = 0
+
         for chunk in chunks:
             for row in chunks[chunk]:
                 for block in row:
@@ -96,8 +116,22 @@ class Tnt:
                     distance = math.hypot(dx, dy)
 
                     if distance <= explosion_radius:
+                        pre_hp = block.hp
                         damage = int(100 * (1 - (distance / explosion_radius)))
                         block.hp -= damage
+
+                        if (
+                            self.leaderboard
+                            and self.owner_id is not None
+                            and pre_hp > 0
+                            and block.hp <= 0
+                        ):
+                            blocks_destroyed += 1
+
+        if blocks_destroyed > 0 and self.leaderboard and self.owner_id is not None:
+            self.leaderboard.record_blocks_broken(
+                self.owner_id, self.owner_display_name or "Unknown", blocks_destroyed
+            )
 
         explosion = Explosion(self.body.position, self.texture_atlas, self.atlas_items, particle_count=20)
         explosions.append(explosion)
@@ -190,8 +224,41 @@ class Tnt:
         screen.blit(overlay_surface, overlay_rect)
 
 class MegaTnt(Tnt):
-    def __init__(self, space, x, y, texture_atlas, atlas_items, sound_manager, owner_name=None, velocity=0, rotation=0, mass=100):
-        super().__init__(space, x, y, texture_atlas, atlas_items, sound_manager, owner_name, velocity, rotation, mass)
+    def __init__(
+        self,
+        space,
+        x,
+        y,
+        texture_atlas,
+        atlas_items,
+        sound_manager,
+        owner_name=None,
+        velocity=0,
+        rotation=0,
+        mass=100,
+        owner_display_name=None,
+        owner_message=None,
+        profile_image_url=None,
+        owner_id=None,
+        leaderboard=None,
+    ):
+        super().__init__(
+            space,
+            x,
+            y,
+            texture_atlas,
+            atlas_items,
+            sound_manager,
+            owner_name,
+            velocity,
+            rotation,
+            mass,
+            owner_display_name,
+            owner_message,
+            profile_image_url,
+            owner_id,
+            leaderboard,
+        )
         print("Spawning MegaTNT")
         self.name = "mega_tnt"
         self.scale_multiplier = 2
@@ -206,6 +273,8 @@ class MegaTnt(Tnt):
         explosion_radius = 3 * BLOCK_SIZE * self.scale_multiplier
         self.detonated = True
 
+        blocks_destroyed = 0
+
         for chunk in chunks:
             for row in chunks[chunk]:
                 for block in row:
@@ -217,8 +286,22 @@ class MegaTnt(Tnt):
                     distance = math.hypot(dx, dy)
 
                     if distance <= explosion_radius:
+                        pre_hp = block.hp
                         damage = int(100 * self.scale_multiplier * (1 - (distance / explosion_radius)))
                         block.hp -= damage
+
+                        if (
+                            self.leaderboard
+                            and self.owner_id is not None
+                            and pre_hp > 0
+                            and block.hp <= 0
+                        ):
+                            blocks_destroyed += 1
+
+        if blocks_destroyed > 0 and self.leaderboard and self.owner_id is not None:
+            self.leaderboard.record_blocks_broken(
+                self.owner_id, self.owner_display_name or "Unknown", blocks_destroyed
+            )
 
         explosion = Explosion(self.body.position, self.texture_atlas, self.atlas_items, particle_count=40)
         explosions.append(explosion)
