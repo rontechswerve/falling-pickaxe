@@ -106,6 +106,18 @@ class Hud:
 
         x, y = self.position
 
+        pickaxe_label = self.pickaxe_name or ""
+        pickaxe_surface = render_text_with_outline(
+            f"Pickaxe: {pickaxe_label}",
+            self.pickaxe_font,
+            (255, 255, 255),
+            (0, 0, 0),
+            outline_width=2,
+        )
+        pickaxe_x = (screen.get_width() - pickaxe_surface.get_width()) // 2
+        pickaxe_label_y = self.spacing
+        screen.blit(pickaxe_surface, (pickaxe_x, pickaxe_label_y))
+
         for ore, amount in self.amounts.items():
             # Retrieve the icon rect from atlas_items["item"][ore]
             if ore in self.atlas_items["item"]:
