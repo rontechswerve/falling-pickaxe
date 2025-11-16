@@ -46,6 +46,9 @@ class Hud:
         self.icon_size = (64, 64)  # Size to draw each icon
         self.spacing = 15  # Space between items
 
+        self.pickaxe_name = ""
+        self.pickaxe_font = pygame.font.Font(None, 72)
+
         # Initialize a font (using the default font and size 24)
         self.font = pygame.font.Font(None, 64)
 
@@ -56,11 +59,26 @@ class Hud:
         """
         self.amounts.update(new_amounts)
 
+    def set_pickaxe_name(self, pickaxe_name):
+        self.pickaxe_name = pickaxe_name
+
     def draw(self, screen, pickaxe_y, fast_slow_active, fast_slow):
         """
         Draws the HUD: each ore icon with its amount and other indicators.
         """
         x, y = self.position
+
+        pickaxe_label = self.pickaxe_name or ""
+        pickaxe_surface = render_text_with_outline(
+            f"Pickaxe: {pickaxe_label}",
+            self.pickaxe_font,
+            (255, 255, 255),
+            (0, 0, 0),
+            outline_width=2,
+        )
+        pickaxe_x = (screen.get_width() - pickaxe_surface.get_width()) // 2
+        pickaxe_label_y = self.spacing
+        screen.blit(pickaxe_surface, (pickaxe_x, pickaxe_label_y))
 
         for ore, amount in self.amounts.items():
             # Retrieve the icon rect from atlas_items["item"][ore]
