@@ -91,8 +91,7 @@ class TikTokChatBridge:
                     "TikTok Live ended for @%s (room %s); event=%s", self.unique_id, getattr(event, "room_id", "?"), event
                 )
 
-        @self.client.on(CommentEvent)
-        async def _on_comment(event: CommentEvent) -> None:
+        async def _handle_comment(event: CommentEvent) -> None:
             logger.debug("Received TikTok comment event: %s", event)
             self._last_comment_time = asyncio.get_running_loop().time()
             display_name = event.user.nickname or event.user.uniqueId or "Unknown"
@@ -109,7 +108,14 @@ class TikTokChatBridge:
 
             print(f"TikTok chat: {display_name} -> {message}")
             logger.info("Queued TNT for chat message from %s", display_name)
-            logger.debug("Queues now: tnt=%d mega=%d fast/slow=%d big=%d pickaxe=%d", len(self.tnt_queue), len(self.mega_tnt_queue), len(self.fast_slow_queue), len(self.big_queue), len(self.pickaxe_queue))
+            logger.debug(
+                "Queues now: tnt=%d mega=%d fast/slow=%d big=%d pickaxe=%d",
+                len(self.tnt_queue),
+                len(self.mega_tnt_queue),
+                len(self.fast_slow_queue),
+                len(self.big_queue),
+                len(self.pickaxe_queue),
+            )
             text_lower = message.lower()
             highlight = "tnt" if "tnt" in text_lower else None
             self.tnt_queue.append({**payload, "highlight": highlight})
@@ -139,16 +145,17 @@ class TikTokChatBridge:
             }
             for key, pickaxe_type in pickaxe_map.items():
                 if key in text_lower and author_id not in [entry.get("author_id") for entry in self.pickaxe_queue]:
-                    self.pickaxe_queue.append({
-                        "author_id": author_id,
-                        "display_name": display_name,
-                        "pickaxe_type": pickaxe_type,
-                    })
+                    self.pickaxe_queue.append(
+                        {
+                            "author_id": author_id,
+                            "display_name": display_name,
+                            "pickaxe_type": pickaxe_type,
+                        }
+                    )
                     logger.info("Added %s to Pickaxe queue (%s)", display_name, pickaxe_type)
                     break
 
-        @self.client.on(GiftEvent)
-        async def _on_gift(event: GiftEvent) -> None:
+        async def _handle_gift(event: GiftEvent) -> None:
             logger.debug("Received TikTok gift event: %s", event)
             self._last_gift_time = asyncio.get_running_loop().time()
             display_name = event.user.nickname or event.user.uniqueId or "Unknown"
@@ -172,6 +179,12 @@ class TikTokChatBridge:
             logger.info("Added %s to Superchat MegaTNT queue (gift)", display_name)
             logger.debug("Superchat queue size now %d", len(self.superchat_queue))
             self.superchat_queue.append(payload)
+
+        # Register both typed and string-based listeners so we catch proto and string events.
+        self.client.add_listener(CommentEvent, _handle_comment)
+        self.client.add_listener("comment", _handle_comment)
+        self.client.add_listener(GiftEvent, _handle_gift)
+        self.client.add_listener("gift", _handle_gift)
 
     def start(self, loop: asyncio.AbstractEventLoop) -> None:
         logger.debug("Starting TikTokLive client for @%s in background loop", self.unique_id)
