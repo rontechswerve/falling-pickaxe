@@ -16,9 +16,20 @@ session = requests.Session()
 seen_comments = set()
 
 
+def _is_placeholder(value: Optional[str]) -> bool:
+    if not value:
+        return True
+    return str(value).startswith("YOUR_") or str(value).endswith("_OPTIONAL")
+
+
+def is_configured(value: Optional[str]) -> bool:
+    """Return True when the provided config string is non-empty and not a placeholder."""
+    return not _is_placeholder(value)
+
+
 def _access_token() -> Optional[str]:
     token = config.get("INSTAGRAM_ACCESS_TOKEN")
-    if not token:
+    if not token or _is_placeholder(token):
         logger.warning("INSTAGRAM_ACCESS_TOKEN is not set; Instagram Live polling is disabled.")
         return None
     return token
@@ -116,12 +127,16 @@ def get_instagram_user_from_page(page_id: str) -> Tuple[Optional[str], Optional[
     if resolution:
         return resolution[0], resolution[1]
 
+    logger.warning(
+        "Facebook Page %s did not return a linked Instagram account (business/professional/connected/shadow).",
+        page_id,
+    )
     return None, data
 
 
 def get_live_media_for_user(user_id: str) -> List[Dict]:
     """Return all live or recently live media for the Instagram user."""
-    if not user_id:
+    if not user_id or _is_placeholder(user_id):
         return []
 
     data = _get(
@@ -135,15 +150,15 @@ def discover_user_id() -> Tuple[Optional[str], Optional[Dict]]:
     """Resolve an Instagram user ID using config hints (user id, Facebook Page, or shadow IG user)."""
 
     configured_user = config.get("INSTAGRAM_USER_ID")
-    if configured_user:
+    if configured_user and not _is_placeholder(configured_user):
         return configured_user, {"source": "configured_user"}
 
     shadow_user = config.get("INSTAGRAM_SHADOW_USER_ID")
-    if shadow_user:
+    if shadow_user and not _is_placeholder(shadow_user):
         return shadow_user, {"source": "shadow_user"}
 
     page_id = config.get("FACEBOOK_PAGE_ID")
-    if page_id:
+    if page_id and not _is_placeholder(page_id):
         user_id, raw = get_instagram_user_from_page(page_id)
         if user_id:
             return user_id, {"source": "page_lookup", "details": raw}
@@ -153,7 +168,7 @@ def discover_user_id() -> Tuple[Optional[str], Optional[Dict]]:
 
 def get_live_media(live_media_id: str) -> Optional[Dict]:
     """Retrieve metadata for a single live media/broadcast."""
-    if not live_media_id:
+    if not live_media_id or _is_placeholder(live_media_id):
         return None
 
     data = _get(
@@ -166,6 +181,14 @@ def get_live_media(live_media_id: str) -> Optional[Dict]:
 def get_active_live_media(user_id: str) -> Optional[Dict]:
     """Return the first active live media for the given user, if any."""
     live_media_list = get_live_media_for_user(user_id)
+    if live_media_list:
+        statuses = ", ".join(
+            [
+                f"{media.get('id')}: {media.get('status')}" for media in live_media_list
+                if media.get("id")
+            ]
+        )
+        logger.info("Found live_media entries for user %s: %s", user_id, statuses)
     for media in live_media_list:
         status = (media.get("status") or "").lower()
         if status in {"live", "active", "inprogress", "in_progress"}:

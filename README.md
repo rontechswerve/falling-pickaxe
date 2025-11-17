@@ -86,6 +86,7 @@ If you prefer to set up the environment manually:
    - `FACEBOOK_PAGE_ID`: optional Page ID so the game can discover the linked Instagram account automatically.
    - `INSTAGRAM_LIVE_MEDIA_ID`: optional fallback broadcast ID if you want to force a specific live session.
    - `INSTAGRAM_ACCESS_TOKEN`: a long-lived Instagram user token with the permissions required by the Instagram Graph API.
+   - Placeholder strings that start with `YOUR_` are ignored by the app to prevent Graph errors—replace them with real IDs/tokens.
 4. Adjust the remaining intervals and queue pop timings as desired.
 
 **Note:** The automated scripts (`run.ps1` and `run.sh`) will run the game and restart it in case of unexpected crashes. When you close the game window normally, the script will exit cleanly. This is perfect for unattended streams.
@@ -114,6 +115,7 @@ Once configured, every Instagram Live comment will spawn a TNT in-game with the 
   2. Query `/{shadow-ig-user-id}/live_media?fields=id,status,title,ingest_streams` to find the active live media.
   3. If needed, call `/{live_media_id}/live_comments?fields=id,text,from{id,username,profile_picture_url},created_time` to verify chat access.
 - If the token is invalid, the game will temporarily skip Graph calls until you supply a new token to prevent repeated failures.
+- If your Page does not expose a `shadow_ig_user`, use the `connected_instagram_account` or `instagram_business_account`/`instagram_professional_account` IDs from step 1 above. Drop whichever ID you get into `INSTAGRAM_USER_ID` (or keep `FACEBOOK_PAGE_ID` set) and restart the game—the app will resolve and poll that account automatically. Placeholder values like `YOUR_LIVE_MEDIA_ID_OPTIONAL` are skipped so you won’t see GraphMethodException 100 errors when you leave them unchanged.
 
 ### Available chat commands
 ```

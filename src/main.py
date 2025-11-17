@@ -8,6 +8,7 @@ from instagram import (
     get_live_comment_stream_id,
     get_live_media,
     get_new_live_comments,
+    is_configured,
 )
 from config import config
 from atlas import create_texture_atlas
@@ -55,9 +56,15 @@ if config["CHAT_CONTROL"] == True:
             "App will run without chat control.",
         )
 
-    if live_media is None and config.get("INSTAGRAM_LIVE_MEDIA_ID"):
+    fallback_live_media = config.get("INSTAGRAM_LIVE_MEDIA_ID")
+    if live_media is None and is_configured(fallback_live_media):
         print("No active live media found via user lookup. Checking fallback live media ID...")
-        live_media = get_live_media(config["INSTAGRAM_LIVE_MEDIA_ID"])
+        live_media = get_live_media(fallback_live_media)
+    elif live_media is None and fallback_live_media and not is_configured(fallback_live_media):
+        print(
+            "No active live media found via user lookup, and fallback INSTAGRAM_LIVE_MEDIA_ID"
+            " is still a placeholder. Set a real live media id if you want to force a specific broadcast."
+        )
 
     if live_media is None:
         print("No active Instagram Live found. App will run without it.")
