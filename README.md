@@ -24,6 +24,15 @@ Donations on [YouTube (Super Thanks)](https://www.youtube.com/watch?v=gcjeidHWEb
 ## How to use it
 *Update: You can watch my tutorial here: https://youtu.be/aFrvoFE7r_g*
 
+### Python version and SDL/pygame prerequisites
+
+- **Use Python 3.10–3.12.** TikTok chat control needs Python 3.10+, and prebuilt `pygame` wheels currently ship up to 3.12. Python 3.13+ will try to compile SDL from source and the bundled scripts will stop with a message so you can install a supported interpreter first.
+- If you are on macOS and ever need to build `pygame` from source, install SDL libraries first:
+  ```bash
+  brew install sdl2 sdl2_image sdl2_mixer sdl2_ttf
+  ```
+  On Debian/Ubuntu, use `sudo apt-get install libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev`.
+
 ### Quick Start (Recommended)
 The easiest way to run the game is using the automated scripts that handle everything for you:
 

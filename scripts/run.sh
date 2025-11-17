@@ -81,7 +81,24 @@ if [ -z "$PYTHON_CMD" ]; then
     exit 1
 fi
 
-echo "Using Python command: $PYTHON_CMD"
+PY_VERSION_RAW=$($PYTHON_CMD - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+)
+
+echo "Using Python command: $PYTHON_CMD (Python $PY_VERSION_RAW)"
+
+# pygame wheels are only published up to Python 3.12 today; 3.13+ will try to
+# compile SDL from source and fail without extra system libraries. Block early
+# with a clear message so users can install a supported interpreter.
+PY_MAJOR=${PY_VERSION_RAW%%.*}
+PY_MINOR=${PY_VERSION_RAW#*.}
+if [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -ge 13 ]; then
+    echo "Error: Python $PY_VERSION_RAW detected. Please install Python 3.10–3.12 (recommended) so pygame wheels are available."
+    echo "TikTok chat control also requires Python 3.10+; 3.9 will run the game but disables chat."
+    exit 1
+fi
 
 # Check if virtual environment exists
 if [ ! -d ".venv" ]; then

@@ -45,6 +45,18 @@ function Test-DependenciesInstalled {
 }
 
 try {
+    $pyVersion = & python - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+    $pyVersion = $pyVersion.Trim()
+    Write-Host "Using Python version $pyVersion"
+
+    $pyMajor,$pyMinor = $pyVersion.Split('.')
+    if ($pyMajor -eq 3 -and [int]$pyMinor -ge 13) {
+        throw "Python $pyVersion detected. Install Python 3.10–3.12 so pygame wheels are available. TikTok chat control also requires 3.10+."
+    }
+
     # Check if virtual environment exists
     if (-not (Test-Path ".venv")) {
         Write-Host "Creating virtual environment..."
