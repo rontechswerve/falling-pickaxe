@@ -42,15 +42,15 @@ class TikTokChatBridge:
         self.big_queue = big_queue
         self.pickaxe_queue = pickaxe_queue
         self.mega_tnt_queue = mega_tnt_queue
-        self.client = TikTokLiveClient(unique_id=unique_id, process_initial_data=False)
+        self.client = TikTokLiveClient(unique_id=unique_id)
         self._register_handlers(CommentEvent, ConnectEvent, GiftEvent)
 
     def _register_handlers(self, CommentEvent, ConnectEvent, GiftEvent) -> None:
-        @self.client.on("connect")
+        @self.client.on(ConnectEvent)
         async def _on_connect(_: ConnectEvent) -> None:
             logger.info("Connected to TikTok Live as %s (room %s)", self.unique_id, self.client.room_id)
 
-        @self.client.on("comment")
+        @self.client.on(CommentEvent)
         async def _on_comment(event: CommentEvent) -> None:
             display_name = event.user.nickname or event.user.uniqueId or "Unknown"
             author_id = str(event.user.userId or event.user.uniqueId or display_name)
@@ -102,7 +102,7 @@ class TikTokChatBridge:
                     logger.info("Added %s to Pickaxe queue (%s)", display_name, pickaxe_type)
                     break
 
-        @self.client.on("gift")
+        @self.client.on(GiftEvent)
         async def _on_gift(event: GiftEvent) -> None:
             display_name = event.user.nickname or event.user.uniqueId or "Unknown"
             author_id = str(event.user.userId or event.user.uniqueId or display_name)
