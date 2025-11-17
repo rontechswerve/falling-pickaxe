@@ -24,9 +24,18 @@ def _access_token() -> Optional[str]:
     return token
 
 
+token_invalidated = False
+
+
 def _get(url: str, params: Dict[str, str]) -> Optional[Dict]:
+    global token_invalidated
+
     token = _access_token()
     if not token:
+        return None
+
+    if token_invalidated:
+        logger.warning("Skipping Instagram Graph call because the access token is invalid or expired.")
         return None
 
     params_with_token = {**params, "access_token": token}
@@ -37,6 +46,23 @@ def _get(url: str, params: Dict[str, str]) -> Optional[Dict]:
         return response.json()
     except requests.HTTPError as exc:
         message = exc.response.text if exc.response is not None else str(exc)
+        error_json: Dict[str, Dict] = {}
+        try:
+            error_json = exc.response.json() if exc.response is not None else {}
+        except Exception:  # noqa: BLE001 - best-effort parse for diagnostics only
+            error_json = {}
+
+        error_info = error_json.get("error") or {}
+        code = error_info.get("code")
+        subcode = error_info.get("error_subcode")
+        if code == 190:
+            token_invalidated = True
+            logger.error(
+                "Instagram access token is invalid or expired (code %s, subcode %s). "
+                "Refresh the token via Instagram Login / Facebook Graph and update INSTAGRAM_ACCESS_TOKEN.",
+                code,
+                subcode,
+            )
         logger.error("Instagram API request failed: %s :: %s", exc, message)
     except requests.RequestException as exc:
         logger.error("Instagram API request failed: %s", exc)

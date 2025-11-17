@@ -106,6 +106,15 @@ The YouTube polling logic has been replaced with Instagram Live comment polling.
 
 Once configured, every Instagram Live comment will spawn a TNT in-game with the commenter’s display name, message, and profile picture attached.
 
+**Instagram Graph troubleshooting**
+
+- If you see an error like `OAuthException code 190 (error_subcode 467)` in the console logs, your access token is expired or revoked. Regenerate a **long-lived user token** with Instagram Login (https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login#exchanging-a-short-lived-token-for-a-long-lived-token) and update `INSTAGRAM_ACCESS_TOKEN`.
+- When you only have a Facebook Page ID, you can still resolve the live account through Graph Explorer (https://developers.facebook.com/tools/explorer/) using the **Shadow IG User** endpoints (https://developers.facebook.com/docs/graph-api/reference/shadow-ig-user/):
+  1. Query `/{page-id}?fields=instagram_business_account,instagram_professional_account,connected_instagram_account,shadow_ig_user` to retrieve the linked IG/shadow IG user ID.
+  2. Query `/{shadow-ig-user-id}/live_media?fields=id,status,title,ingest_streams` to find the active live media.
+  3. If needed, call `/{live_media_id}/live_comments?fields=id,text,from{id,username,profile_picture_url},created_time` to verify chat access.
+- If the token is invalid, the game will temporarily skip Graph calls until you supply a new token to prevent repeated failures.
+
 ### Available chat commands
 ```
 tnt
