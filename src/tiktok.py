@@ -16,7 +16,8 @@ def is_configured(value: Optional[str]) -> bool:
 
 
 if TYPE_CHECKING:  # pragma: no cover - import only for type checkers
-    from TikTokLive import TikTokLiveClient
+    from TikTokLive.client.client import TikTokLiveClient
+    from TikTokLive.client.logger import LogLevel
     from TikTokLive.events import CommentEvent, ConnectEvent, GiftEvent
 
 
@@ -40,6 +41,7 @@ class TikTokChatBridge:
             GiftEvent,
             DisconnectEvent,
             LiveEndEvent,
+            LogLevel,
         ) = _load_tiktoklive()
 
         self.unique_id = unique_id
@@ -50,10 +52,17 @@ class TikTokChatBridge:
         self.pickaxe_queue = pickaxe_queue
         self.mega_tnt_queue = mega_tnt_queue
         self.client = TikTokLiveClient(unique_id=unique_id)
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._future: Optional[asyncio.Future] = None
+        self._health_task: Optional[asyncio.Future] = None
+        self._restart_pending: bool = False
         self._last_comment_time: Optional[float] = None
         self._last_gift_time: Optional[float] = None
         # Surface the TikTokLive client's own debug logs for troubleshooting.
-        self.client.logger.setLevel(logging.DEBUG)
+        try:
+            self.client.logger.setLevel(LogLevel.DEBUG.value)
+        except Exception:
+            self.client.logger.setLevel(logging.DEBUG)
         logger.debug("TikTokLive client created for @%s", unique_id)
         self._register_handlers(CommentEvent, ConnectEvent, GiftEvent, DisconnectEvent, LiveEndEvent)
 
@@ -97,6 +106,7 @@ class TikTokChatBridge:
                 "profile_image_url": profile_image_url,
             }
 
+            print(f"TikTok chat: {display_name} -> {message}")
             logger.info("Queued TNT for chat message from %s", display_name)
             logger.debug("Queues now: tnt=%d mega=%d fast/slow=%d big=%d pickaxe=%d", len(self.tnt_queue), len(self.mega_tnt_queue), len(self.fast_slow_queue), len(self.big_queue), len(self.pickaxe_queue))
             text_lower = message.lower()
@@ -157,30 +167,57 @@ class TikTokChatBridge:
                 "profile_image_url": profile_image_url,
                 "highlight": "megatnt",
             }
+            print(f"TikTok gift from {display_name}: {gift_name or 'TikTok gift'}")
             logger.info("Added %s to Superchat MegaTNT queue (gift)", display_name)
             logger.debug("Superchat queue size now %d", len(self.superchat_queue))
             self.superchat_queue.append(payload)
 
     def start(self, loop: asyncio.AbstractEventLoop) -> None:
         logger.debug("Starting TikTokLive client for @%s in background loop", self.unique_id)
-        future = asyncio.run_coroutine_threadsafe(self.client.start(), loop)
-        asyncio.run_coroutine_threadsafe(self._log_health(), loop)
+        self._loop = loop
 
-        def _on_future_done(fut: asyncio.Future) -> None:
-            try:
-                fut.result()
-            except Exception as exc:  # pragma: no cover - troubleshooting aid
-                if exc.__class__.__name__ == "UserOfflineError":
-                    logger.error(
-                        "TikTokLive reported @%s offline or room closed. Ensure the stream is live and the unique_id is correct.",
-                        self.unique_id,
-                    )
-                else:
-                    logger.error("TikTokLive client stopped with error: %s", exc, exc_info=exc)
+        if self._health_task is None:
+            self._health_task = asyncio.run_coroutine_threadsafe(self._log_health(), loop)
+
+        self._start_client()
+
+    def _start_client(self) -> None:
+        if self._loop is None:
+            return
+
+        logger.info("Starting TikTokLive connection to @%s", self.unique_id)
+        self._future = asyncio.run_coroutine_threadsafe(self.client.start(), self._loop)
+        self._future.add_done_callback(self._on_future_done)
+
+    def _on_future_done(self, fut: asyncio.Future) -> None:
+        try:
+            fut.result()
+        except Exception as exc:  # pragma: no cover - troubleshooting aid
+            if exc.__class__.__name__ == "UserOfflineError":
+                logger.error(
+                    "TikTokLive reported @%s offline or room closed. Ensure the stream is live and the unique_id is correct.",
+                    self.unique_id,
+                )
+                self._schedule_restart("offline or room closed")
             else:
-                logger.warning("TikTokLive client stopped without error; stream may have ended.")
+                logger.error("TikTokLive client stopped with error: %s", exc, exc_info=exc)
+                self._schedule_restart("error")
+        else:
+            logger.warning("TikTokLive client stopped without error; stream may have ended.")
+            self._schedule_restart("stream ended")
 
-        future.add_done_callback(_on_future_done)
+    def _schedule_restart(self, reason: str, delay_seconds: int = 15) -> None:
+        if self._loop is None or self._restart_pending:
+            return
+
+        self._restart_pending = True
+        logger.info("Reconnecting to TikTok Live in %ds (%s)", delay_seconds, reason)
+
+        def _do_restart() -> None:
+            self._restart_pending = False
+            self._start_client()
+
+        self._loop.call_later(delay_seconds, _do_restart)
 
     async def _log_health(self) -> None:
         """Periodically log connection state and queue sizes while running."""
@@ -223,7 +260,7 @@ def _extract_avatar(event: object) -> Optional[str]:
     return None
 
 
-def _load_tiktoklive() -> Tuple[object, object, object, object, Optional[object], Optional[object]]:
+def _load_tiktoklive() -> Tuple[object, object, object, object, Optional[object], Optional[object], object]:
     """Import TikTokLive lazily so Python 3.9 users see a friendly message."""
 
     if sys.version_info < (3, 10):
@@ -234,15 +271,25 @@ def _load_tiktoklive() -> Tuple[object, object, object, object, Optional[object]
         )
 
     try:
-        tiktoklive_module = importlib.import_module("TikTokLive")
+        client_module = importlib.import_module("TikTokLive.client.client")
         events_module = importlib.import_module("TikTokLive.events")
-        TikTokLiveClient = getattr(tiktoklive_module, "TikTokLiveClient")
+        logger_module = importlib.import_module("TikTokLive.client.logger")
+        TikTokLiveClient = getattr(client_module, "TikTokLiveClient")
         CommentEvent = getattr(events_module, "CommentEvent")
         ConnectEvent = getattr(events_module, "ConnectEvent")
         GiftEvent = getattr(events_module, "GiftEvent")
         DisconnectEvent = getattr(events_module, "DisconnectEvent", None)
         LiveEndEvent = getattr(events_module, "LiveEndEvent", None)
-        return TikTokLiveClient, CommentEvent, ConnectEvent, GiftEvent, DisconnectEvent, LiveEndEvent
+        LogLevel = getattr(logger_module, "LogLevel")
+        return (
+            TikTokLiveClient,
+            CommentEvent,
+            ConnectEvent,
+            GiftEvent,
+            DisconnectEvent,
+            LiveEndEvent,
+            LogLevel,
+        )
     except TypeError as exc:
         raise RuntimeError(
             "TikTokLive failed to import due to Python version incompatibility. "
