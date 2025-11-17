@@ -91,10 +91,10 @@ Steps 2 to 4 are **optional**. You can disable the entire chat integration by se
 
 The Instagram Graph integration has been removed. The game now listens to TikTok Live comments and gifts via the [TikTokLive](https://pypi.org/project/TikTokLive/) Python client.
 
-1. Install dependencies with the run scripts or `pip install -r requirements.txt`.
+1. Install dependencies with the run scripts or `pip install -r requirements.txt` (TikTok chat control requires Python 3.10+).
 2. Set `CHAT_CONTROL` to `true` in `config.json`.
 3. Set `TIKTOK_UNIQUE_ID` to the broadcaster’s username (example: `officialgeilegisela`). No API keys or tokens are required for public rooms.
-4. Run the game. Comment and gift events from the connected live room will enqueue TNT/MegaTNT spawns with the chatter’s display name, message, and avatar.
+4. Run the game. Comment and gift events from the connected live room will enqueue TNT/MegaTNT spawns with the chatter’s display name, message, and avatar. If you start the game on Python 3.9 or lower, TikTok chat control will be disabled with a clear message instead of crashing.
 
 ### Available chat commands
 ```

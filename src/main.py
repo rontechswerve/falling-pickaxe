@@ -59,7 +59,11 @@ if config["CHAT_CONTROL"] and is_configured(config.get("TIKTOK_UNIQUE_ID")):
         mega_tnt_queue,
         asyncio_loop,
     )
-    print("TikTok Live listener started; chat will drive TNT and MegaTNT spawns.")
+    if tiktok_bridge is None:
+        print("TikTok Live listener failed to start; chat control disabled.")
+        config["CHAT_CONTROL"] = False
+    else:
+        print("TikTok Live listener started; chat will drive TNT and MegaTNT spawns.")
 
 def game():
     window_width = int(INTERNAL_WIDTH / 2)

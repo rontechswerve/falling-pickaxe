@@ -1,9 +1,8 @@
 import asyncio
+import importlib
 import logging
-from typing import Dict, List, Optional
-
-from TikTokLive import TikTokLiveClient
-from TikTokLive.types.events import CommentEvent, ConnectEvent, GiftEvent
+import sys
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +13,11 @@ def is_configured(value: Optional[str]) -> bool:
         return False
     value_str = str(value).strip()
     return bool(value_str) and not value_str.upper().startswith("YOUR_")
+
+
+if TYPE_CHECKING:  # pragma: no cover - import only for type checkers
+    from TikTokLive import TikTokLiveClient
+    from TikTokLive.types.events import CommentEvent, ConnectEvent, GiftEvent
 
 
 class TikTokChatBridge:
@@ -29,6 +33,8 @@ class TikTokChatBridge:
         pickaxe_queue: List[Dict],
         mega_tnt_queue: List[Dict],
     ) -> None:
+        TikTokLiveClient, CommentEvent, ConnectEvent, GiftEvent = _load_tiktoklive()
+
         self.unique_id = unique_id
         self.tnt_queue = tnt_queue
         self.superchat_queue = superchat_queue
@@ -37,9 +43,9 @@ class TikTokChatBridge:
         self.pickaxe_queue = pickaxe_queue
         self.mega_tnt_queue = mega_tnt_queue
         self.client = TikTokLiveClient(unique_id=unique_id, process_initial_data=False)
-        self._register_handlers()
+        self._register_handlers(CommentEvent, ConnectEvent, GiftEvent)
 
-    def _register_handlers(self) -> None:
+    def _register_handlers(self, CommentEvent, ConnectEvent, GiftEvent) -> None:
         @self.client.on("connect")
         async def _on_connect(_: ConnectEvent) -> None:
             logger.info("Connected to TikTok Live as %s (room %s)", self.unique_id, self.client.room_id)
@@ -141,6 +147,35 @@ def _extract_avatar(event: object) -> Optional[str]:
     return None
 
 
+def _load_tiktoklive() -> Tuple[object, object, object, object]:
+    """Import TikTokLive lazily so Python 3.9 users see a friendly message."""
+
+    if sys.version_info < (3, 10):
+        raise RuntimeError(
+            "TikTok chat control requires Python 3.10+ because the TikTokLive "
+            "library uses modern type syntax. Please upgrade your Python interpreter "
+            "or disable CHAT_CONTROL."
+        )
+
+    try:
+        tiktoklive_module = importlib.import_module("TikTokLive")
+        events_module = importlib.import_module("TikTokLive.types.events")
+        TikTokLiveClient = getattr(tiktoklive_module, "TikTokLiveClient")
+        CommentEvent = getattr(events_module, "CommentEvent")
+        ConnectEvent = getattr(events_module, "ConnectEvent")
+        GiftEvent = getattr(events_module, "GiftEvent")
+        return TikTokLiveClient, CommentEvent, ConnectEvent, GiftEvent
+    except TypeError as exc:
+        raise RuntimeError(
+            "TikTokLive failed to import due to Python version incompatibility. "
+            "Use Python 3.10+ or pin TikTokLive to a version that supports older interpreters."
+        ) from exc
+    except Exception as exc:
+        raise RuntimeError(
+            "TikTokLive dependency is not available. Run `pip install TikTokLive` or disable CHAT_CONTROL."
+        ) from exc
+
+
 def start_tiktok_bridge(
     unique_id: str,
     tnt_queue: List[Dict],
@@ -150,15 +185,19 @@ def start_tiktok_bridge(
     pickaxe_queue: List[Dict],
     mega_tnt_queue: List[Dict],
     loop: asyncio.AbstractEventLoop,
-) -> TikTokChatBridge:
-    bridge = TikTokChatBridge(
-        unique_id,
-        tnt_queue,
-        superchat_queue,
-        fast_slow_queue,
-        big_queue,
-        pickaxe_queue,
-        mega_tnt_queue,
-    )
-    bridge.start(loop)
-    return bridge
+) -> Optional[TikTokChatBridge]:
+    try:
+        bridge = TikTokChatBridge(
+            unique_id,
+            tnt_queue,
+            superchat_queue,
+            fast_slow_queue,
+            big_queue,
+            pickaxe_queue,
+            mega_tnt_queue,
+        )
+        bridge.start(loop)
+        return bridge
+    except RuntimeError as exc:
+        logger.error(str(exc))
+        return None
