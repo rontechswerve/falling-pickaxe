@@ -81,6 +81,25 @@ def _get(url: str, params: Dict[str, str]) -> Optional[Dict]:
     return None
 
 
+def _get_with_field_fallback(url: str, field_variants: List[str]) -> Optional[Dict]:
+    """Try the provided field lists in order, stopping once data is returned.
+
+    Some Graph node types omit fields like `status` (e.g., ShadowIGMedia). To avoid
+    fatal errors when callers provide a specific live media ID, we progressively
+    degrade to slimmer field sets so we can still fetch usable data.
+    """
+
+    for fields in field_variants:
+        data = _get(url, {"fields": fields})
+        if data:
+            return data
+        if token_invalidated:
+            break
+
+    logger.error("Unable to fetch %s with any provided field set: %s", url, field_variants)
+    return None
+
+
 def _resolve_first_available(data: Dict, keys: List[str]) -> Optional[Tuple[str, Dict]]:
     """Find the first populated field from keys and return its id along with the raw object."""
 
@@ -139,9 +158,14 @@ def get_live_media_for_user(user_id: str) -> List[Dict]:
     if not user_id or _is_placeholder(user_id):
         return []
 
-    data = _get(
+    data = _get_with_field_fallback(
         f"{GRAPH_API_BASE}/{user_id}/live_media",
-        {"fields": "id,status,title,ingest_streams"},
+        [
+            "id,status,title,ingest_streams",
+            "id,live_status,title,ingest_streams",
+            "id,title",
+            "id",
+        ],
     )
     return data.get("data", []) if data else []
 
@@ -171,9 +195,14 @@ def get_live_media(live_media_id: str) -> Optional[Dict]:
     if not live_media_id or _is_placeholder(live_media_id):
         return None
 
-    data = _get(
+    data = _get_with_field_fallback(
         f"{GRAPH_API_BASE}/{live_media_id}",
-        {"fields": "id,status,title,ingest_streams"},
+        [
+            "id,status,title,ingest_streams",
+            "id,live_status,title,ingest_streams",
+            "id,title",
+            "id",
+        ],
     )
     return data if data else None
 
