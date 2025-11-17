@@ -33,7 +33,14 @@ class TikTokChatBridge:
         pickaxe_queue: List[Dict],
         mega_tnt_queue: List[Dict],
     ) -> None:
-        TikTokLiveClient, CommentEvent, ConnectEvent, GiftEvent = _load_tiktoklive()
+        (
+            TikTokLiveClient,
+            CommentEvent,
+            ConnectEvent,
+            GiftEvent,
+            DisconnectEvent,
+            LiveEndEvent,
+        ) = _load_tiktoklive()
 
         self.unique_id = unique_id
         self.tnt_queue = tnt_queue
@@ -43,15 +50,37 @@ class TikTokChatBridge:
         self.pickaxe_queue = pickaxe_queue
         self.mega_tnt_queue = mega_tnt_queue
         self.client = TikTokLiveClient(unique_id=unique_id)
-        self._register_handlers(CommentEvent, ConnectEvent, GiftEvent)
+        # Surface the TikTokLive client's own debug logs for troubleshooting.
+        self.client.logger.setLevel(logging.DEBUG)
+        logger.debug("TikTokLive client created for @%s", unique_id)
+        self._register_handlers(CommentEvent, ConnectEvent, GiftEvent, DisconnectEvent, LiveEndEvent)
 
-    def _register_handlers(self, CommentEvent, ConnectEvent, GiftEvent) -> None:
+    def _register_handlers(self, CommentEvent, ConnectEvent, GiftEvent, DisconnectEvent, LiveEndEvent) -> None:
+        logger.debug("Registering TikTokLive handlers for connect/comment/gift events")
+
         @self.client.on(ConnectEvent)
         async def _on_connect(_: ConnectEvent) -> None:
             logger.info("Connected to TikTok Live as %s (room %s)", self.unique_id, self.client.room_id)
 
+        # Log disconnects to help diagnose dropped sessions or offline rooms.
+        if DisconnectEvent:
+            @self.client.on(DisconnectEvent)
+            async def _on_disconnect(event):  # type: ignore[no-untyped-def]
+                logger.warning(
+                    "Disconnected from TikTok Live (room %s); reason=%s", getattr(event, "room_id", "?"), getattr(event, "reason", "unknown")
+                )
+
+        # Report when the stream ends so users know why comments stopped flowing.
+        if LiveEndEvent:
+            @self.client.on(LiveEndEvent)
+            async def _on_live_end(event):  # type: ignore[no-untyped-def]
+                logger.warning(
+                    "TikTok Live ended for @%s (room %s); event=%s", self.unique_id, getattr(event, "room_id", "?"), event
+                )
+
         @self.client.on(CommentEvent)
         async def _on_comment(event: CommentEvent) -> None:
+            logger.debug("Received TikTok comment event: %s", event)
             display_name = event.user.nickname or event.user.uniqueId or "Unknown"
             author_id = str(event.user.userId or event.user.uniqueId or display_name)
             message = event.comment or ""
@@ -65,6 +94,7 @@ class TikTokChatBridge:
             }
 
             logger.info("Queued TNT for chat message from %s", display_name)
+            logger.debug("Queues now: tnt=%d mega=%d fast/slow=%d big=%d pickaxe=%d", len(self.tnt_queue), len(self.mega_tnt_queue), len(self.fast_slow_queue), len(self.big_queue), len(self.pickaxe_queue))
             text_lower = message.lower()
             highlight = "tnt" if "tnt" in text_lower else None
             self.tnt_queue.append({**payload, "highlight": highlight})
@@ -104,6 +134,7 @@ class TikTokChatBridge:
 
         @self.client.on(GiftEvent)
         async def _on_gift(event: GiftEvent) -> None:
+            logger.debug("Received TikTok gift event: %s", event)
             display_name = event.user.nickname or event.user.uniqueId or "Unknown"
             author_id = str(event.user.userId or event.user.uniqueId or display_name)
             profile_image_url = _extract_avatar(event)
@@ -122,10 +153,22 @@ class TikTokChatBridge:
                 "highlight": "megatnt",
             }
             logger.info("Added %s to Superchat MegaTNT queue (gift)", display_name)
+            logger.debug("Superchat queue size now %d", len(self.superchat_queue))
             self.superchat_queue.append(payload)
 
     def start(self, loop: asyncio.AbstractEventLoop) -> None:
-        asyncio.run_coroutine_threadsafe(self.client.start(), loop)
+        logger.debug("Starting TikTokLive client for @%s in background loop", self.unique_id)
+        future = asyncio.run_coroutine_threadsafe(self.client.start(), loop)
+
+        def _on_future_done(fut: asyncio.Future) -> None:
+            try:
+                fut.result()
+            except Exception as exc:  # pragma: no cover - troubleshooting aid
+                logger.error("TikTokLive client stopped with error: %s", exc, exc_info=exc)
+            else:
+                logger.warning("TikTokLive client stopped without error; stream may have ended.")
+
+        future.add_done_callback(_on_future_done)
 
 
 def _extract_avatar(event: object) -> Optional[str]:
@@ -147,7 +190,7 @@ def _extract_avatar(event: object) -> Optional[str]:
     return None
 
 
-def _load_tiktoklive() -> Tuple[object, object, object, object]:
+def _load_tiktoklive() -> Tuple[object, object, object, object, Optional[object], Optional[object]]:
     """Import TikTokLive lazily so Python 3.9 users see a friendly message."""
 
     if sys.version_info < (3, 10):
@@ -164,7 +207,9 @@ def _load_tiktoklive() -> Tuple[object, object, object, object]:
         CommentEvent = getattr(events_module, "CommentEvent")
         ConnectEvent = getattr(events_module, "ConnectEvent")
         GiftEvent = getattr(events_module, "GiftEvent")
-        return TikTokLiveClient, CommentEvent, ConnectEvent, GiftEvent
+        DisconnectEvent = getattr(events_module, "DisconnectEvent", None)
+        LiveEndEvent = getattr(events_module, "LiveEndEvent", None)
+        return TikTokLiveClient, CommentEvent, ConnectEvent, GiftEvent, DisconnectEvent, LiveEndEvent
     except TypeError as exc:
         raise RuntimeError(
             "TikTokLive failed to import due to Python version incompatibility. "
