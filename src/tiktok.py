@@ -94,8 +94,8 @@ class TikTokChatBridge:
         async def _handle_comment(event: CommentEvent) -> None:
             logger.debug("Received TikTok comment event: %s", event)
             self._last_comment_time = asyncio.get_running_loop().time()
-            display_name = event.user.nickname or event.user.uniqueId or "Unknown"
-            author_id = str(event.user.userId or event.user.uniqueId or display_name)
+            display_name = _display_name(event)
+            author_id = _author_id(event)
             message = event.comment or ""
             profile_image_url = _extract_avatar(event)
 
@@ -158,8 +158,8 @@ class TikTokChatBridge:
         async def _handle_gift(event: GiftEvent) -> None:
             logger.debug("Received TikTok gift event: %s", event)
             self._last_gift_time = asyncio.get_running_loop().time()
-            display_name = event.user.nickname or event.user.uniqueId or "Unknown"
-            author_id = str(event.user.userId or event.user.uniqueId or display_name)
+            display_name = _display_name(event)
+            author_id = _author_id(event)
             profile_image_url = _extract_avatar(event)
             gift_name = None
             try:
@@ -309,6 +309,36 @@ def _extract_avatar(event: object) -> Optional[str]:
         except Exception:
             return None
     return None
+
+
+def _display_name(event: object) -> str:
+    user = getattr(event, "user", None)
+    candidates = [
+        getattr(user, "nickname", None) if user else None,
+        getattr(user, "uniqueId", None) if user else None,
+        getattr(user, "unique_id", None) if user else None,
+        getattr(user, "username", None) if user else None,
+    ]
+    for name in candidates:
+        if name:
+            return str(name)
+    return "Unknown"
+
+
+def _author_id(event: object) -> str:
+    user = getattr(event, "user", None)
+    candidates = [
+        getattr(user, "userId", None) if user else None,
+        getattr(user, "user_id", None) if user else None,
+        getattr(user, "id", None) if user else None,
+        getattr(user, "uid", None) if user else None,
+        getattr(user, "uniqueId", None) if user else None,
+        getattr(user, "unique_id", None) if user else None,
+    ]
+    for value in candidates:
+        if value:
+            return str(value)
+    return _display_name(event)
 
 
 def _load_tiktoklive() -> Tuple[object, object, object, object, Optional[object], Optional[object], object]:
