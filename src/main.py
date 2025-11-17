@@ -3,6 +3,7 @@ import pygame
 import pymunk
 import pymunk.pygame_util
 from instagram import (
+    discover_user_id,
     get_active_live_media,
     get_live_comment_stream_id,
     get_live_media,
@@ -30,10 +31,29 @@ live_media = None
 live_comment_id = None
 
 if config["CHAT_CONTROL"] == True:
-    print("Checking for active Instagram Live on configured user")
-    ig_user_id = config.get("INSTAGRAM_USER_ID")
+    print("Checking for active Instagram Live via Instagram/Facebook Graph API")
+    ig_user_id, ig_resolution = discover_user_id()
+
     if ig_user_id:
+        source = ig_resolution.get("source") if isinstance(ig_resolution, dict) else "unknown"
+        if source == "page_lookup":
+            print(
+                "Resolved Instagram user from Facebook Page lookup:",
+                ig_resolution.get("details", {}).get("username")
+                or ig_resolution.get("details", {}).get("id")
+                or ig_user_id,
+            )
+        elif source == "shadow_user":
+            print("Using configured shadow Instagram user:", ig_user_id)
+        else:
+            print("Using configured Instagram user:", ig_user_id)
+
         live_media = get_active_live_media(ig_user_id)
+    else:
+        print(
+            "No Instagram user ID configured or discoverable via Page/shadow IG user.",
+            "App will run without chat control.",
+        )
 
     if live_media is None and config.get("INSTAGRAM_LIVE_MEDIA_ID"):
         print("No active live media found via user lookup. Checking fallback live media ID...")

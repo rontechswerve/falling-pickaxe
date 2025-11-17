@@ -80,8 +80,10 @@ If you prefer to set up the environment manually:
 ### Configuration (Optional)
 1. Make a copy of `default.config.json` to `config.json` or run the game once to automatically copy the config file into `config.json`.
 2. Set `CHAT_CONTROL` to `true` if you want Instagram Live chat to drive game events.
-3. Fill in the Instagram fields:
-   - `INSTAGRAM_USER_ID`: the IG user ID that owns the live broadcast.
+3. Fill in the Instagram/Facebook Graph fields (any one discovery path is enough):
+   - `INSTAGRAM_USER_ID`: the IG user ID that owns the live broadcast (preferred when you already know it).
+   - `INSTAGRAM_SHADOW_USER_ID`: optional shadow IG user ID returned from the Graph API when your account is linked to a Page.
+   - `FACEBOOK_PAGE_ID`: optional Page ID so the game can discover the linked Instagram account automatically.
    - `INSTAGRAM_LIVE_MEDIA_ID`: optional fallback broadcast ID if you want to force a specific live session.
    - `INSTAGRAM_ACCESS_TOKEN`: a long-lived Instagram user token with the permissions required by the Instagram Graph API.
 4. Adjust the remaining intervals and queue pop timings as desired.
@@ -96,7 +98,9 @@ The YouTube polling logic has been replaced with Instagram Live comment polling.
 1. Create a Meta app and enable **Instagram Graph API** with Instagram Login for your app, as described in the official guide: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login
 2. Ensure your Instagram account is a **Business** or **Creator** account linked to a Facebook Page (required for the Graph API).
 3. Obtain a short-lived Instagram user access token via Instagram Login, then exchange it for a **long-lived user token** (valid up to 60 days) using the same guide. Place this token in `INSTAGRAM_ACCESS_TOKEN`.
-4. Query your Instagram user ID (for example with the Graph API `me?fields=id,username`) and place it in `INSTAGRAM_USER_ID`.
+4. Provide one of the following so the game can discover your IG user ID:
+   - **Direct**: call `me?fields=id,username` with your access token and place the ID in `INSTAGRAM_USER_ID`.
+   - **Via Facebook Page**: call `/{page-id}?fields=instagram_business_account,instagram_professional_account,connected_instagram_account,shadow_ig_user` using the Graph API explorer (https://developers.facebook.com/docs/graph-api). Copy the returned IG/Shadow IG user ID into either `INSTAGRAM_USER_ID` or `INSTAGRAM_SHADOW_USER_ID`, or simply set `FACEBOOK_PAGE_ID` and let the game resolve it automatically.
 5. Start an Instagram Live broadcast. The game will call the Live Media endpoint (https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/live_media/) to locate the active broadcast and then poll `/{live_media_id}/live_comments` for chat messages.
 6. If you prefer to hardcode a specific live media ID instead of auto-detection, copy it from your live session and place it in `INSTAGRAM_LIVE_MEDIA_ID`.
 

@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import requests
 from dateutil import parser
@@ -29,13 +29,68 @@ def _get(url: str, params: Dict[str, str]) -> Optional[Dict]:
     if not token:
         return None
 
+    params_with_token = {**params, "access_token": token}
+
     try:
-        response = session.get(url, params={**params, "access_token": token}, timeout=10)
+        response = session.get(url, params=params_with_token, timeout=10)
         response.raise_for_status()
         return response.json()
+    except requests.HTTPError as exc:
+        message = exc.response.text if exc.response is not None else str(exc)
+        logger.error("Instagram API request failed: %s :: %s", exc, message)
     except requests.RequestException as exc:
         logger.error("Instagram API request failed: %s", exc)
+
     return None
+
+
+def _resolve_first_available(data: Dict, keys: List[str]) -> Optional[Tuple[str, Dict]]:
+    """Find the first populated field from keys and return its id along with the raw object."""
+
+    for key in keys:
+        candidate = data.get(key) or {}
+        if isinstance(candidate, dict) and candidate.get("id"):
+            return candidate.get("id"), candidate
+    return None
+
+
+def get_instagram_user_from_page(page_id: str) -> Tuple[Optional[str], Optional[Dict]]:
+    """Discover the IG user linked to a Facebook Page (business/creator or shadow IG user)."""
+
+    if not page_id:
+        return None, None
+
+    data = _get(
+        f"{GRAPH_API_BASE}/{page_id}",
+        {
+            "fields": ",".join(
+                [
+                    "instagram_business_account{id,ig_id,username}",
+                    "instagram_professional_account{id,ig_id,username}",
+                    "connected_instagram_account{id,ig_id,username}",
+                    "shadow_ig_user{id,ig_id,username}",
+                ]
+            )
+        },
+    )
+
+    if not data:
+        return None, None
+
+    resolution = _resolve_first_available(
+        data,
+        [
+            "instagram_business_account",
+            "instagram_professional_account",
+            "connected_instagram_account",
+            "shadow_ig_user",
+        ],
+    )
+
+    if resolution:
+        return resolution[0], resolution[1]
+
+    return None, data
 
 
 def get_live_media_for_user(user_id: str) -> List[Dict]:
@@ -48,6 +103,26 @@ def get_live_media_for_user(user_id: str) -> List[Dict]:
         {"fields": "id,status,title,ingest_streams"},
     )
     return data.get("data", []) if data else []
+
+
+def discover_user_id() -> Tuple[Optional[str], Optional[Dict]]:
+    """Resolve an Instagram user ID using config hints (user id, Facebook Page, or shadow IG user)."""
+
+    configured_user = config.get("INSTAGRAM_USER_ID")
+    if configured_user:
+        return configured_user, {"source": "configured_user"}
+
+    shadow_user = config.get("INSTAGRAM_SHADOW_USER_ID")
+    if shadow_user:
+        return shadow_user, {"source": "shadow_user"}
+
+    page_id = config.get("FACEBOOK_PAGE_ID")
+    if page_id:
+        user_id, raw = get_instagram_user_from_page(page_id)
+        if user_id:
+            return user_id, {"source": "page_lookup", "details": raw}
+
+    return None, None
 
 
 def get_live_media(live_media_id: str) -> Optional[Dict]:
