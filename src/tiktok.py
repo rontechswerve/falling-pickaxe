@@ -50,6 +50,8 @@ class TikTokChatBridge:
         self.pickaxe_queue = pickaxe_queue
         self.mega_tnt_queue = mega_tnt_queue
         self.client = TikTokLiveClient(unique_id=unique_id)
+        self._last_comment_time: Optional[float] = None
+        self._last_gift_time: Optional[float] = None
         # Surface the TikTokLive client's own debug logs for troubleshooting.
         self.client.logger.setLevel(logging.DEBUG)
         logger.debug("TikTokLive client created for @%s", unique_id)
@@ -61,6 +63,7 @@ class TikTokChatBridge:
         @self.client.on(ConnectEvent)
         async def _on_connect(_: ConnectEvent) -> None:
             logger.info("Connected to TikTok Live as %s (room %s)", self.unique_id, self.client.room_id)
+            logger.debug("Connection details: state=%s room_info=%s", getattr(self.client, "connected", None), getattr(self.client, "room_info", None))
 
         # Log disconnects to help diagnose dropped sessions or offline rooms.
         if DisconnectEvent:
@@ -81,6 +84,7 @@ class TikTokChatBridge:
         @self.client.on(CommentEvent)
         async def _on_comment(event: CommentEvent) -> None:
             logger.debug("Received TikTok comment event: %s", event)
+            self._last_comment_time = asyncio.get_running_loop().time()
             display_name = event.user.nickname or event.user.uniqueId or "Unknown"
             author_id = str(event.user.userId or event.user.uniqueId or display_name)
             message = event.comment or ""
@@ -135,6 +139,7 @@ class TikTokChatBridge:
         @self.client.on(GiftEvent)
         async def _on_gift(event: GiftEvent) -> None:
             logger.debug("Received TikTok gift event: %s", event)
+            self._last_gift_time = asyncio.get_running_loop().time()
             display_name = event.user.nickname or event.user.uniqueId or "Unknown"
             author_id = str(event.user.userId or event.user.uniqueId or display_name)
             profile_image_url = _extract_avatar(event)
@@ -159,16 +164,44 @@ class TikTokChatBridge:
     def start(self, loop: asyncio.AbstractEventLoop) -> None:
         logger.debug("Starting TikTokLive client for @%s in background loop", self.unique_id)
         future = asyncio.run_coroutine_threadsafe(self.client.start(), loop)
+        asyncio.run_coroutine_threadsafe(self._log_health(), loop)
 
         def _on_future_done(fut: asyncio.Future) -> None:
             try:
                 fut.result()
             except Exception as exc:  # pragma: no cover - troubleshooting aid
-                logger.error("TikTokLive client stopped with error: %s", exc, exc_info=exc)
+                if exc.__class__.__name__ == "UserOfflineError":
+                    logger.error(
+                        "TikTokLive reported @%s offline or room closed. Ensure the stream is live and the unique_id is correct.",
+                        self.unique_id,
+                    )
+                else:
+                    logger.error("TikTokLive client stopped with error: %s", exc, exc_info=exc)
             else:
                 logger.warning("TikTokLive client stopped without error; stream may have ended.")
 
         future.add_done_callback(_on_future_done)
+
+    async def _log_health(self) -> None:
+        """Periodically log connection state and queue sizes while running."""
+        while True:
+            try:
+                await asyncio.sleep(15)
+                logger.info(
+                    "TikTokLive health: connected=%s room_id=%s queued tnt=%d mega=%d fast/slow=%d big=%d pickaxe=%d last_comment=%s last_gift=%s",
+                    getattr(self.client, "connected", None),
+                    getattr(self.client, "room_id", None),
+                    len(self.tnt_queue),
+                    len(self.mega_tnt_queue),
+                    len(self.fast_slow_queue),
+                    len(self.big_queue),
+                    len(self.pickaxe_queue),
+                    f"{self._last_comment_time:.1f}" if self._last_comment_time else "never",
+                    f"{self._last_gift_time:.1f}" if self._last_gift_time else "never",
+                )
+            except Exception as exc:  # pragma: no cover - debug helper
+                logger.error("Health logger crashed: %s", exc, exc_info=exc)
+                return
 
 
 def _extract_avatar(event: object) -> Optional[str]:
