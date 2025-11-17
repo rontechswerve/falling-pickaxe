@@ -84,7 +84,7 @@ If you prefer to set up the environment manually:
    - `INSTAGRAM_USER_ID`: the IG user ID that owns the live broadcast (preferred when you already know it).
    - `INSTAGRAM_SHADOW_USER_ID`: optional shadow IG user ID returned from the Graph API when your account is linked to a Page.
    - `FACEBOOK_PAGE_ID`: optional Page ID so the game can discover the linked Instagram account automatically.
-   - `INSTAGRAM_LIVE_MEDIA_ID`: optional fallback broadcast ID if you want to force a specific live session.
+   - `INSTAGRAM_LIVE_MEDIA_ID`: optional fallback broadcast ID if you want to force a specific live session. Normally you can leave this blank and the game will auto-select the first live session it finds.
    - `INSTAGRAM_ACCESS_TOKEN`: a long-lived Instagram user token with the permissions required by the Instagram Graph API.
    - Placeholder strings that start with `YOUR_` are ignored by the app to prevent Graph errors—replace them with real IDs/tokens.
 4. Adjust the remaining intervals and queue pop timings as desired.
@@ -102,8 +102,8 @@ The YouTube polling logic has been replaced with Instagram Live comment polling.
 4. Provide one of the following so the game can discover your IG user ID:
    - **Direct**: call `me?fields=id,username` with your access token and place the ID in `INSTAGRAM_USER_ID`.
    - **Via Facebook Page**: call `/{page-id}?fields=instagram_business_account,instagram_professional_account,connected_instagram_account,shadow_ig_user` using the Graph API explorer (https://developers.facebook.com/docs/graph-api). Copy the returned IG/Shadow IG user ID into either `INSTAGRAM_USER_ID` or `INSTAGRAM_SHADOW_USER_ID`, or simply set `FACEBOOK_PAGE_ID` and let the game resolve it automatically.
-5. Start an Instagram Live broadcast. The game will call the Live Media endpoint (https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/live_media/) on **Graph API v24.0** to locate the active broadcast and then poll `/{live_media_id}/live_comments` (falling back to `/comments` when needed) for chat messages.
-6. If you prefer to hardcode a specific live media ID instead of auto-detection, copy it from your live session and place it in `INSTAGRAM_LIVE_MEDIA_ID`.
+5. Start an Instagram Live broadcast. The game will call the Live Media endpoint (https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/live_media/) on **Graph API v24.0** to locate the active broadcast and then poll `/{live_media_id}/live_comments` (falling back to `/comments` when needed) for chat messages. The app now skips unsupported fields when talking to the Graph API, so you should not see `Tried accessing nonexisting field` errors.
+6. If you prefer to hardcode a specific live media ID instead of auto-detection, copy it from your live session and place it in `INSTAGRAM_LIVE_MEDIA_ID`. Otherwise, leaving it blank will let the game auto-pick the first live_media entry it finds for the account.
 
 Once configured, every Instagram Live comment will spawn a TNT in-game with the commenter’s display name, message, and profile picture attached. Some comment nodes omit `profile_picture_url`, so the game makes a follow-up call to the IG user node to retrieve the avatar when necessary.
 
@@ -112,8 +112,8 @@ Once configured, every Instagram Live comment will spawn a TNT in-game with the 
 - If you see an error like `OAuthException code 190 (error_subcode 467)` in the console logs, your access token is expired or revoked. Regenerate a **long-lived user token** with Instagram Login (https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login#exchanging-a-short-lived-token-for-a-long-lived-token) and update `INSTAGRAM_ACCESS_TOKEN`.
 - When you only have a Facebook Page ID, you can still resolve the live account through Graph Explorer (https://developers.facebook.com/tools/explorer/) using the **Shadow IG User** endpoints (https://developers.facebook.com/docs/graph-api/reference/shadow-ig-user/):
   1. Query `/{page-id}?fields=instagram_business_account,instagram_professional_account,connected_instagram_account,shadow_ig_user` to retrieve the linked IG/shadow IG user ID.
-  2. Query `/{shadow-ig-user-id}/live_media?fields=id,status,title,ingest_streams` to find the active live media.
-  3. If needed, call `/{live_media_id}/live_comments?fields=id,text,from{id,username,profile_picture_url},created_time` to verify chat access.
+  2. Query `/{shadow-ig-user-id}/live_media` to find the active live media without specifying fields that may be unsupported.
+  3. If needed, call `/{live_media_id}/live_comments?fields=id,text,from{id,username},created_time` (the game will also fall back to `/comments`) to verify chat access.
 - If the token is invalid, the game will temporarily skip Graph calls until you supply a new token to prevent repeated failures.
 - If your Page does not expose a `shadow_ig_user`, use the `connected_instagram_account` or `instagram_business_account`/`instagram_professional_account` IDs from step 1 above. Drop whichever ID you get into `INSTAGRAM_USER_ID` (or keep `FACEBOOK_PAGE_ID` set) and restart the game—the app will resolve and poll that account automatically. Placeholder values like `YOUR_LIVE_MEDIA_ID_OPTIONAL` are skipped so you won’t see GraphMethodException 100 errors when you leave them unchanged.
 

@@ -82,25 +82,6 @@ def _get(url: str, params: Dict[str, str]) -> Optional[Dict]:
     return None
 
 
-def _get_with_field_fallback(url: str, field_variants: List[str]) -> Optional[Dict]:
-    """Try the provided field lists in order, stopping once data is returned.
-
-    Some Graph node types omit fields like `status` (e.g., ShadowIGMedia). To avoid
-    fatal errors when callers provide a specific live media ID, we progressively
-    degrade to slimmer field sets so we can still fetch usable data.
-    """
-
-    for fields in field_variants:
-        data = _get(url, {"fields": fields})
-        if data:
-            return data
-        if token_invalidated:
-            break
-
-    logger.error("Unable to fetch %s with any provided field set: %s", url, field_variants)
-    return None
-
-
 def _get_edge_variant(base_url: str, edges: List[str], params: Dict[str, str]) -> Optional[Dict]:
     """Try multiple edge names on the same base node until one returns data."""
 
@@ -191,15 +172,7 @@ def get_live_media_for_user(user_id: str) -> List[Dict]:
     if not user_id or _is_placeholder(user_id):
         return []
 
-    data = _get_with_field_fallback(
-        f"{GRAPH_API_BASE}/{user_id}/live_media",
-        [
-            "id,status,title,ingest_streams",
-            "id,live_status,title,ingest_streams",
-            "id,title",
-            "id",
-        ],
-    )
+    data = _get(f"{GRAPH_API_BASE}/{user_id}/live_media", {})
     return data.get("data", []) if data else []
 
 
@@ -228,15 +201,7 @@ def get_live_media(live_media_id: str) -> Optional[Dict]:
     if not live_media_id or _is_placeholder(live_media_id):
         return None
 
-    data = _get_with_field_fallback(
-        f"{GRAPH_API_BASE}/{live_media_id}",
-        [
-            "id,status,title,ingest_streams",
-            "id,live_status,title,ingest_streams",
-            "id,title",
-            "id",
-        ],
-    )
+    data = _get(f"{GRAPH_API_BASE}/{live_media_id}", {})
     return data if data else None
 
 
@@ -246,16 +211,33 @@ def get_active_live_media(user_id: str) -> Optional[Dict]:
     if live_media_list:
         statuses = ", ".join(
             [
-                f"{media.get('id')}: {media.get('status')}" for media in live_media_list
+                f"{media.get('id')}: {media.get('status') or media.get('live_status')}"
+                for media in live_media_list
                 if media.get("id")
             ]
         )
-        logger.info("Found live_media entries for user %s: %s", user_id, statuses)
+        logger.info(
+            "Found live_media entries for user %s (status/live_status when available): %s",
+            user_id,
+            statuses or "no status fields returned",
+        )
     for media in live_media_list:
         status = (media.get("status") or "").lower()
         if status in {"live", "active", "inprogress", "in_progress"}:
             detailed = get_live_media(media.get("id"))
             return detailed or media
+        live_status = (media.get("live_status") or "").lower()
+        if live_status in {"live", "active", "inprogress", "in_progress"}:
+            detailed = get_live_media(media.get("id"))
+            return detailed or media
+
+    if live_media_list:
+        logger.info(
+            "No explicit status returned; defaulting to first live_media entry for user %s.",
+            user_id,
+        )
+        detailed = get_live_media(live_media_list[0].get("id")) if live_media_list[0].get("id") else None
+        return detailed or live_media_list[0]
     return None
 
 
