@@ -8,12 +8,13 @@ from dateutil import parser
 
 from config import config
 
-GRAPH_API_BASE = "https://graph.facebook.com/v21.0"
+GRAPH_API_BASE = "https://graph.facebook.com/v24.0"
 
 logger = logging.getLogger(__name__)
 
 session = requests.Session()
 seen_comments = set()
+profile_picture_cache: Dict[str, Optional[str]] = {}
 
 
 def _is_placeholder(value: Optional[str]) -> bool:
@@ -121,6 +122,24 @@ def _resolve_first_available(data: Dict, keys: List[str]) -> Optional[Tuple[str,
         candidate = data.get(key) or {}
         if isinstance(candidate, dict) and candidate.get("id"):
             return candidate.get("id"), candidate
+    return None
+
+
+def get_profile_picture_url(user_id: str) -> Optional[str]:
+    """Best-effort lookup for a user's profile picture, with basic caching."""
+
+    if not user_id:
+        return None
+
+    if user_id in profile_picture_cache:
+        return profile_picture_cache[user_id]
+
+    data = _get(f"{GRAPH_API_BASE}/{user_id}", {"fields": "profile_picture_url,username"})
+    if data and data.get("profile_picture_url"):
+        profile_picture_cache[user_id] = data.get("profile_picture_url")
+        return profile_picture_cache[user_id]
+
+    profile_picture_cache[user_id] = None
     return None
 
 
@@ -255,7 +274,7 @@ def get_new_live_comments(live_media_id: str) -> List[Dict]:
     data = _get_edge_variant(
         f"{GRAPH_API_BASE}/{live_media_id}",
         ["live_comments", "comments"],
-        {"fields": "id,text,from{id,username,profile_picture_url},created_time"},
+        {"fields": "id,text,from{id,username},created_time"},
     )
     if not data or "data" not in data:
         return []
@@ -273,6 +292,7 @@ def get_new_live_comments(live_media_id: str) -> List[Dict]:
         seen_comments.add(comment_id)
 
         author_info = item.get("from", {}) or {}
+        author_id = author_info.get("id")
         timestamp_raw = item.get("created_time")
         timestamp = (
             parser.parse(timestamp_raw).strftime("%Y-%m-%d %H:%M:%S")
@@ -282,6 +302,7 @@ def get_new_live_comments(live_media_id: str) -> List[Dict]:
 
         display_name = author_info.get("username") or author_info.get("id") or "Unknown"
         message_text = item.get("text") or ""
+        profile_image_url = author_info.get("profile_picture_url") or get_profile_picture_url(author_id)
 
         log_message = f"[{timestamp}] {display_name}: {message_text}"
         with open(log_file, "a+", encoding="utf-8") as chat_file:
@@ -291,8 +312,8 @@ def get_new_live_comments(live_media_id: str) -> List[Dict]:
             {
                 "timestamp": timestamp,
                 "author": display_name,
-                "author_channel_id": author_info.get("id") or display_name,
-                "profile_image_url": author_info.get("profile_picture_url"),
+                "author_channel_id": author_id or display_name,
+                "profile_image_url": profile_image_url,
                 "message": message_text,
                 "sc_details": None,
                 "ss_details": None,

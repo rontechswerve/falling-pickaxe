@@ -102,10 +102,10 @@ The YouTube polling logic has been replaced with Instagram Live comment polling.
 4. Provide one of the following so the game can discover your IG user ID:
    - **Direct**: call `me?fields=id,username` with your access token and place the ID in `INSTAGRAM_USER_ID`.
    - **Via Facebook Page**: call `/{page-id}?fields=instagram_business_account,instagram_professional_account,connected_instagram_account,shadow_ig_user` using the Graph API explorer (https://developers.facebook.com/docs/graph-api). Copy the returned IG/Shadow IG user ID into either `INSTAGRAM_USER_ID` or `INSTAGRAM_SHADOW_USER_ID`, or simply set `FACEBOOK_PAGE_ID` and let the game resolve it automatically.
-5. Start an Instagram Live broadcast. The game will call the Live Media endpoint (https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/live_media/) to locate the active broadcast and then poll `/{live_media_id}/live_comments` for chat messages.
+5. Start an Instagram Live broadcast. The game will call the Live Media endpoint (https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/live_media/) on **Graph API v24.0** to locate the active broadcast and then poll `/{live_media_id}/live_comments` (falling back to `/comments` when needed) for chat messages.
 6. If you prefer to hardcode a specific live media ID instead of auto-detection, copy it from your live session and place it in `INSTAGRAM_LIVE_MEDIA_ID`.
 
-Once configured, every Instagram Live comment will spawn a TNT in-game with the commenter’s display name, message, and profile picture attached.
+Once configured, every Instagram Live comment will spawn a TNT in-game with the commenter’s display name, message, and profile picture attached. Some comment nodes omit `profile_picture_url`, so the game makes a follow-up call to the IG user node to retrieve the avatar when necessary.
 
 **Instagram Graph troubleshooting**
 
