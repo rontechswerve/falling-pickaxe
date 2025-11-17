@@ -1,3 +1,4 @@
+import sys
 import time
 import pygame
 import pymunk
@@ -24,12 +25,22 @@ key_m_pressed = False
 tiktok_bridge = None
 
 if config["CHAT_CONTROL"]:
-    tiktok_unique_id = config.get("TIKTOK_UNIQUE_ID")
-    if is_configured(tiktok_unique_id):
-        print(f"Connecting to TikTok Live for @{tiktok_unique_id}...")
-    else:
-        print("CHAT_CONTROL is enabled but TIKTOK_UNIQUE_ID is missing or a placeholder. Running without chat control.")
+    if sys.version_info < (3, 10):
+        print(
+            "TikTok chat control requires Python 3.10+; CHAT_CONTROL will be disabled "
+            "until you upgrade your interpreter."
+        )
         config["CHAT_CONTROL"] = False
+    else:
+        tiktok_unique_id = config.get("TIKTOK_UNIQUE_ID")
+        if is_configured(tiktok_unique_id):
+            print(f"Connecting to TikTok Live for @{tiktok_unique_id}...")
+        else:
+            print(
+                "CHAT_CONTROL is enabled but TIKTOK_UNIQUE_ID is missing or a placeholder. "
+                "Running without chat control."
+            )
+            config["CHAT_CONTROL"] = False
 
 # Queues for chat
 tnt_queue = []
