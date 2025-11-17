@@ -100,6 +100,20 @@ def _get_with_field_fallback(url: str, field_variants: List[str]) -> Optional[Di
     return None
 
 
+def _get_edge_variant(base_url: str, edges: List[str], params: Dict[str, str]) -> Optional[Dict]:
+    """Try multiple edge names on the same base node until one returns data."""
+
+    for edge in edges:
+        data = _get(f"{base_url}/{edge}", params)
+        if data:
+            return data
+        if token_invalidated:
+            break
+
+    logger.error("Unable to fetch %s with any provided edge: %s", base_url, edges)
+    return None
+
+
 def _resolve_first_available(data: Dict, keys: List[str]) -> Optional[Tuple[str, Dict]]:
     """Find the first populated field from keys and return its id along with the raw object."""
 
@@ -238,8 +252,9 @@ def get_new_live_comments(live_media_id: str) -> List[Dict]:
     if not live_media_id:
         return []
 
-    data = _get(
-        f"{GRAPH_API_BASE}/{live_media_id}/live_comments",
+    data = _get_edge_variant(
+        f"{GRAPH_API_BASE}/{live_media_id}",
+        ["live_comments", "comments"],
         {"fields": "id,text,from{id,username,profile_picture_url},created_time"},
     )
     if not data or "data" not in data:
