@@ -17,7 +17,7 @@ def is_configured(value: Optional[str]) -> bool:
 
 if TYPE_CHECKING:  # pragma: no cover - import only for type checkers
     from TikTokLive import TikTokLiveClient
-    from TikTokLive.types.events import CommentEvent, ConnectEvent, GiftEvent
+    from TikTokLive.events import CommentEvent, ConnectEvent, GiftEvent
 
 
 class TikTokChatBridge:
@@ -159,7 +159,7 @@ def _load_tiktoklive() -> Tuple[object, object, object, object]:
 
     try:
         tiktoklive_module = importlib.import_module("TikTokLive")
-        events_module = importlib.import_module("TikTokLive.types.events")
+        events_module = importlib.import_module("TikTokLive.events")
         TikTokLiveClient = getattr(tiktoklive_module, "TikTokLiveClient")
         CommentEvent = getattr(events_module, "CommentEvent")
         ConnectEvent = getattr(events_module, "ConnectEvent")

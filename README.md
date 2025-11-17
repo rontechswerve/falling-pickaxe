@@ -26,7 +26,7 @@ Donations on [YouTube (Super Thanks)](https://www.youtube.com/watch?v=gcjeidHWEb
 
 ### Python version and SDL/pygame prerequisites
 
-- **Use Python 3.10–3.12.** TikTok chat control needs Python 3.10+, and prebuilt `pygame` wheels currently ship up to 3.12. Python 3.13+ will try to compile SDL from source and the bundled scripts will stop with a message so you can install a supported interpreter first.
+- **Use Python 3.10–3.12.** TikTok chat control needs Python 3.10+, and prebuilt `pygame` wheels currently ship up to 3.12. The run scripts now auto-pick a compatible interpreter (preferring 3.12 → 3.11 → 3.10); if only Python 3.9 is available they will still run the game but TikTok chat will stay off, and 3.13+ is blocked with a clear message.
 - If you are on macOS and ever need to build `pygame` from source, install SDL libraries first:
   ```bash
   brew install sdl2 sdl2_image sdl2_mixer sdl2_ttf
@@ -100,7 +100,7 @@ Steps 2 to 4 are **optional**. You can disable the entire chat integration by se
 
 The Instagram Graph integration has been removed. The game now listens to TikTok Live comments and gifts via the [TikTokLive](https://pypi.org/project/TikTokLive/) Python client.
 
-1. Install dependencies with the run scripts or `pip install -r requirements.txt` (TikTok chat control requires Python 3.10+).
+1. Install dependencies with the run scripts or `pip install -r requirements.txt` (TikTok chat control requires Python 3.10+ and the scripts will choose the best installed 3.10–3.12 interpreter automatically).
 2. Set `CHAT_CONTROL` to `true` in `config.json`.
 3. Set `TIKTOK_UNIQUE_ID` to the broadcaster’s username (example: `officialgeilegisela`). No API keys or tokens are required for public rooms.
 4. Run the game. Comment and gift events from the connected live room will enqueue TNT/MegaTNT spawns with the chatter’s display name, message, and avatar. If you start the game on Python 3.9 or lower, TikTok chat control will be disabled with a clear message instead of crashing.

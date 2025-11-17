@@ -20,20 +20,45 @@
 
 set -e  # Exit on any error
 
-# Function to detect Python command
+# Function to detect a supported Python command (prefers 3.10–3.12 for pygame wheels)
 detect_python() {
-    if command -v python3 &> /dev/null; then
-        echo "python3"
-    elif command -v python &> /dev/null; then
-        # Check if python is Python 3
-        if python -c "import sys; exit(0 if sys.version_info.major == 3 else 1)" &> /dev/null; then
-            echo "python"
-        else
-            echo ""
+    local candidates=("python3.12" "python3.11" "python3.10" "python3" "python")
+    local fallback_cmd=""
+
+    for cmd in "${candidates[@]}"; do
+        if ! command -v "$cmd" &> /dev/null; then
+            continue
         fi
-    else
-        echo ""
+
+        local version=$($cmd - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+)
+
+        local major=${version%%.*}
+        local minor=${version#*.}
+
+        # Prefer 3.10–3.12 because pygame publishes wheels there
+        if [ "$major" -eq 3 ] && [ "$minor" -ge 10 ] && [ "$minor" -le 12 ]; then
+            echo "$cmd"
+            return 0
+        fi
+
+        # Track a 3.9 fallback to at least run the game (chat will be disabled later)
+        if [ "$major" -eq 3 ] && [ "$minor" -eq 9 ] && [ -z "$fallback_cmd" ]; then
+            fallback_cmd="$cmd"
+        fi
+    done
+
+    # If we didn't find 3.10–3.12, fall back to 3.9 to let the game run without chat
+    if [ -n "$fallback_cmd" ]; then
+        echo "$fallback_cmd"
+        return 0
     fi
+
+    # Nothing suitable found
+    echo ""
 }
 
 # Function to check if dependencies are installed
@@ -77,7 +102,7 @@ trap cleanup SIGINT SIGTERM
 PYTHON_CMD=$(detect_python)
 
 if [ -z "$PYTHON_CMD" ]; then
-    echo "Error: Python 3 is not installed or not accessible via 'python' or 'python3' command."
+    echo "Error: No supported Python interpreter found. Install Python 3.10–3.12 (preferred) or 3.9 to run without chat control."
     exit 1
 fi
 
@@ -98,6 +123,10 @@ if [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -ge 13 ]; then
     echo "Error: Python $PY_VERSION_RAW detected. Please install Python 3.10–3.12 (recommended) so pygame wheels are available."
     echo "TikTok chat control also requires Python 3.10+; 3.9 will run the game but disables chat."
     exit 1
+fi
+
+if [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -le 9 ]; then
+    echo "Warning: Python $PY_VERSION_RAW detected. The game will run, but TikTok chat control stays disabled on 3.9." >&2
 fi
 
 # Check if virtual environment exists

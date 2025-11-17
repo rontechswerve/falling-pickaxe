@@ -44,23 +44,79 @@ function Test-DependenciesInstalled {
     }
 }
 
+function Get-PythonSelection {
+    $candidates = @(
+        @("python3.12"),
+        @("python3.11"),
+        @("python3.10"),
+        @("python3"),
+        @("python"),
+        @("py", "-3.12"),
+        @("py", "-3.11"),
+        @("py", "-3.10"),
+        @("py", "-3")
+    )
+
+    $fallback = $null
+
+    foreach ($candidate in $candidates) {
+        try {
+            $extra = @()
+            if ($candidate.Length -gt 1) { $extra = $candidate[1..($candidate.Length - 1)] }
+            $version = & $candidate[0] @extra "-c" "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+        }
+        catch {
+            continue
+        }
+
+        if (-not $version) { continue }
+        $version = $version.Trim()
+        $parts = $version.Split('.')
+        $major = [int]$parts[0]
+        $minor = [int]$parts[1]
+
+        if ($major -eq 3 -and $minor -ge 10 -and $minor -le 12) {
+            return @{ Cmd = $candidate; Version = $version }
+        }
+
+        if ($major -eq 3 -and $minor -eq 9 -and -not $fallback) {
+            $fallback = @{ Cmd = $candidate; Version = $version }
+        }
+    }
+
+    return $fallback
+}
+
+function Invoke-Python($cmdParts, $args) {
+    $extra = @()
+    if ($cmdParts.Length -gt 1) { $extra = $cmdParts[1..($cmdParts.Length - 1)] }
+    & $cmdParts[0] @extra @args
+}
+
 try {
-    $pyVersion = & python - <<'PY'
-import sys
-print(f"{sys.version_info.major}.{sys.version_info.minor}")
-PY
-    $pyVersion = $pyVersion.Trim()
-    Write-Host "Using Python version $pyVersion"
+    $selection = Get-PythonSelection
+    if (-not $selection) {
+        throw "Python 3.10–3.12 not found. Install a supported Python so pygame wheels are available."
+    }
+
+    $pythonCmd = $selection.Cmd
+    $pyVersion = $selection.Version
+
+    Write-Host "Using Python command '$($pythonCmd -join ' ')" ("(Python $pyVersion)")
 
     $pyMajor,$pyMinor = $pyVersion.Split('.')
     if ($pyMajor -eq 3 -and [int]$pyMinor -ge 13) {
         throw "Python $pyVersion detected. Install Python 3.10–3.12 so pygame wheels are available. TikTok chat control also requires 3.10+."
     }
 
+    if ($pyMajor -eq 3 -and [int]$pyMinor -le 9) {
+        Write-Warning "Python $pyVersion detected. The game will run, but TikTok chat control stays disabled on 3.9."
+    }
+
     # Check if virtual environment exists
     if (-not (Test-Path ".venv")) {
         Write-Host "Creating virtual environment..."
-        & "python" -m venv .venv
+        Invoke-Python $pythonCmd @("-m", "venv", ".venv")
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to create virtual environment"
         }
