@@ -51,7 +51,8 @@ class TikTokChatBridge:
         self.big_queue = big_queue
         self.pickaxe_queue = pickaxe_queue
         self.mega_tnt_queue = mega_tnt_queue
-        self.client = TikTokLiveClient(unique_id=unique_id)
+        self._client_factory = lambda: TikTokLiveClient(unique_id=unique_id)
+        self.client = self._client_factory()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._future: Optional[asyncio.Future] = None
         self._health_task: Optional[asyncio.Future] = None
@@ -185,6 +186,10 @@ class TikTokChatBridge:
         if self._loop is None:
             return
 
+        if getattr(self.client, "connected", False):
+            logger.debug("TikTokLive client already connected; skipping start")
+            return
+
         logger.info("Starting TikTokLive connection to @%s", self.unique_id)
         self._future = asyncio.run_coroutine_threadsafe(self.client.start(), self._loop)
         self._future.add_done_callback(self._on_future_done)
@@ -198,12 +203,19 @@ class TikTokChatBridge:
                     "TikTokLive reported @%s offline or room closed. Ensure the stream is live and the unique_id is correct.",
                     self.unique_id,
                 )
+                self._reset_client()
                 self._schedule_restart("offline or room closed")
+            elif exc.__class__.__name__ == "AlreadyConnectedError":
+                logger.warning("TikTokLive client reported an existing connection; resetting client before retry")
+                self._reset_client()
+                self._schedule_restart("recover from duplicate connection")
             else:
                 logger.error("TikTokLive client stopped with error: %s", exc, exc_info=exc)
+                self._reset_client()
                 self._schedule_restart("error")
         else:
             logger.warning("TikTokLive client stopped without error; stream may have ended.")
+            self._reset_client()
             self._schedule_restart("stream ended")
 
     def _schedule_restart(self, reason: str, delay_seconds: int = 15) -> None:
@@ -218,6 +230,32 @@ class TikTokChatBridge:
             self._start_client()
 
         self._loop.call_later(delay_seconds, _do_restart)
+
+    def _reset_client(self) -> None:
+        """Dispose of the current client and create a fresh one before reconnecting."""
+        try:
+            if getattr(self.client, "connected", False) and self._loop is not None:
+                self._loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self.client.stop()))
+        except Exception:
+            logger.debug("Failed to stop TikTokLive client during reset", exc_info=True)
+
+        (
+            TikTokLiveClient,
+            CommentEvent,
+            ConnectEvent,
+            GiftEvent,
+            DisconnectEvent,
+            LiveEndEvent,
+            LogLevel,
+        ) = _load_tiktoklive()
+
+        self.client = self._client_factory()
+        try:
+            self.client.logger.setLevel(LogLevel.DEBUG.value)
+        except Exception:
+            self.client.logger.setLevel(logging.DEBUG)
+
+        self._register_handlers(CommentEvent, ConnectEvent, GiftEvent, DisconnectEvent, LiveEndEvent)
 
     async def _log_health(self) -> None:
         """Periodically log connection state and queue sizes while running."""
