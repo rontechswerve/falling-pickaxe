@@ -2,14 +2,6 @@ import time
 import pygame
 import pymunk
 import pymunk.pygame_util
-from instagram import (
-    discover_user_id,
-    get_active_live_media,
-    get_live_comment_stream_id,
-    get_live_media,
-    get_new_live_comments,
-    is_configured,
-)
 from config import config
 from atlas import create_texture_atlas
 from pathlib import Path
@@ -23,61 +15,21 @@ import asyncio
 import threading
 import random
 from hud import Hud
+from tiktok import is_configured, start_tiktok_bridge
 
 # Track key states
 key_t_pressed = False
 key_m_pressed = False
 
-live_media = None
-live_comment_id = None
+tiktok_bridge = None
 
-if config["CHAT_CONTROL"] == True:
-    print("Checking for active Instagram Live via Instagram/Facebook Graph API")
-    ig_user_id, ig_resolution = discover_user_id()
-
-    if ig_user_id:
-        source = ig_resolution.get("source") if isinstance(ig_resolution, dict) else "unknown"
-        if source == "page_lookup":
-            print(
-                "Resolved Instagram user from Facebook Page lookup:",
-                ig_resolution.get("details", {}).get("username")
-                or ig_resolution.get("details", {}).get("id")
-                or ig_user_id,
-            )
-        elif source == "shadow_user":
-            print("Using configured shadow Instagram user:", ig_user_id)
-        else:
-            print("Using configured Instagram user:", ig_user_id)
-
-        live_media = get_active_live_media(ig_user_id)
+if config["CHAT_CONTROL"]:
+    tiktok_unique_id = config.get("TIKTOK_UNIQUE_ID")
+    if is_configured(tiktok_unique_id):
+        print(f"Connecting to TikTok Live for @{tiktok_unique_id}...")
     else:
-        print(
-            "No Instagram user ID configured or discoverable via Page/shadow IG user.",
-            "App will run without chat control.",
-        )
-
-    fallback_live_media = config.get("INSTAGRAM_LIVE_MEDIA_ID")
-    if live_media is None and is_configured(fallback_live_media):
-        print("No active live media found via user lookup. Checking fallback live media ID...")
-        live_media = get_live_media(fallback_live_media)
-    elif live_media is None and fallback_live_media and not is_configured(fallback_live_media):
-        print(
-            "No active live media found via user lookup, and fallback INSTAGRAM_LIVE_MEDIA_ID"
-            " is still a placeholder. Set a real live media id if you want to force a specific broadcast."
-        )
-
-    if live_media is None:
-        print("No active Instagram Live found. App will run without it.")
-    else:
-        print("Instagram Live found:", live_media.get("title") or live_media.get("id"))
-
-    if live_media is not None:
-        live_comment_id = get_live_comment_stream_id(live_media)
-
-    if live_comment_id is None:
-        print("No Instagram Live comment stream found. App will run without chat.")
-    else:
-        print("Instagram Live comments will be read from:", live_comment_id)
+        print("CHAT_CONTROL is enabled but TIKTOK_UNIQUE_ID is missing or a placeholder. Running without chat control.")
+        config["CHAT_CONTROL"] = False
 
 # Queues for chat
 tnt_queue = []
@@ -87,79 +39,6 @@ big_queue = []
 pickaxe_queue = []
 mega_tnt_queue = []
 
-async def handle_instagram_poll():
-    new_messages = get_new_live_comments(live_comment_id)
-
-    for message in new_messages:
-        author = message["author"]
-        text = message["message"] or ""
-        author_id = message.get("author_channel_id") or author
-        profile_image_url = message.get("profile_image_url")
-        is_superchat = message["sc_details"] is not None
-        is_supersticker = message["ss_details"] is not None
-
-        text_lower = text.lower()
-        chat_payload = {
-            "author_id": author_id,
-            "display_name": author,
-            "message": text,
-            "profile_image_url": profile_image_url,
-        }
-
-        # Every chat message spawns at least one TNT with metadata for the overlay
-        tnt_queue.append({**chat_payload, "highlight": "tnt" if "tnt" in text_lower else None})
-        print(f"Queued TNT for chat message from {author}")
-
-        # Check for MegaTNT keyword
-        if "megatnt" in text_lower:
-            mega_tnt_queue.append({**chat_payload, "highlight": "megatnt"})
-            print(f"Added {author} to MegaTNT queue (keyword)")
-
-        # Check for Superchat/Supersticker (add to mega tnt queue for 10x MegaTNT)
-        if is_superchat or is_supersticker:
-            tnt_superchat_queue.append({**chat_payload, "highlight": "megatnt"})
-            print(f"Added {author} to Superchat MegaTNT queue")
-
-        if "fast" in text_lower and author_id not in [entry["author_id"] for entry in fast_slow_queue]:
-            fast_slow_queue.append({"author_id": author_id, "display_name": author, "choice": "Fast"})
-            print(f"Added {author} to Fast/Slow queue (Fast)")
-        elif "slow" in text_lower and author_id not in [entry["author_id"] for entry in fast_slow_queue]:
-            fast_slow_queue.append({"author_id": author_id, "display_name": author, "choice": "Slow"})
-            print(f"Added {author} to Fast/Slow queue (Slow)")
-
-        if "big" in text_lower and author_id not in [entry["author_id"] for entry in big_queue]:
-            big_queue.append({"author_id": author_id, "display_name": author})
-            print(f"Added {author} to Big queue")
-
-        # Check for pickaxe commands (add author and pickaxe type to pickaxe_queue)
-        if "wood" in text_lower:
-            if author_id not in [entry["author_id"] for entry in pickaxe_queue]:
-                pickaxe_queue.append({"author_id": author_id, "display_name": author, "pickaxe_type": "wooden_pickaxe"})
-                print(f"Added {author} to Pickaxe queue (wooden_pickaxe)")
-        elif "stone" in text_lower:
-            if author_id not in [entry["author_id"] for entry in pickaxe_queue]:
-                pickaxe_queue.append({"author_id": author_id, "display_name": author, "pickaxe_type": "stone_pickaxe"})
-                print(f"Added {author} to Pickaxe queue (stone_pickaxe)")
-        elif "iron" in text_lower:
-            if author_id not in [entry["author_id"] for entry in pickaxe_queue]:
-                pickaxe_queue.append({"author_id": author_id, "display_name": author, "pickaxe_type": "iron_pickaxe"})
-                print(f"Added {author} to Pickaxe queue (iron_pickaxe)")
-        elif "gold" in text_lower:
-            if author_id not in [entry["author_id"] for entry in pickaxe_queue]:
-                pickaxe_queue.append({"author_id": author_id, "display_name": author, "pickaxe_type": "golden_pickaxe"})
-                print(f"Added {author} to Pickaxe queue (golden_pickaxe)")
-        elif "diamond" in text_lower:
-            if author_id not in [entry["author_id"] for entry in pickaxe_queue]:
-                pickaxe_queue.append({"author_id": author_id, "display_name": author, "pickaxe_type": "diamond_pickaxe"})
-                print(f"Added {author} to Pickaxe queue (diamond_pickaxe)")
-        elif "netherite" in text_lower:
-            if author_id not in [entry["author_id"] for entry in pickaxe_queue]:
-                pickaxe_queue.append({"author_id": author_id, "display_name": author, "pickaxe_type": "netherite_pickaxe"})
-                print(f"Added {author} to Pickaxe queue (netherite_pickaxe)")
-
-    # print the queue counts (optional, for debugging)
-    # print(f"Queues: TNT={len(tnt_queue)}, Superchat TNT={len(tnt_superchat_queue)}, Fast/Slow={len(fast_slow_queue)}, Big={len(big_queue)}, Pickaxe={len(pickaxe_queue)}, MegaTNT={len(mega_tnt_queue)}")
-
 def start_event_loop(loop):
     asyncio.set_event_loop(loop)
     loop.run_forever()
@@ -168,6 +47,19 @@ def start_event_loop(loop):
 asyncio_loop = asyncio.new_event_loop()
 # Start it in a daemon thread so it doesn’t block shutdown
 threading.Thread(target=start_event_loop, args=(asyncio_loop,), daemon=True).start()
+
+if config["CHAT_CONTROL"] and is_configured(config.get("TIKTOK_UNIQUE_ID")):
+    tiktok_bridge = start_tiktok_bridge(
+        config.get("TIKTOK_UNIQUE_ID"),
+        tnt_queue,
+        tnt_superchat_queue,
+        fast_slow_queue,
+        big_queue,
+        pickaxe_queue,
+        mega_tnt_queue,
+        asyncio_loop,
+    )
+    print("TikTok Live listener started; chat will drive TNT and MegaTNT spawns.")
 
 def game():
     window_width = int(INTERNAL_WIDTH / 2)
@@ -258,10 +150,6 @@ def game():
 
     # Explosions
     explosions = []
-
-    # Instagram Live
-    ig_poll_interval = 1000 * config.get("INSTAGRAM_POLL_INTERVAL_SECONDS", 15)
-    last_ig_poll = pygame.time.get_ticks()
 
     # Save progress interval
     save_progress_interval = 1000 * config["SAVE_PROGRESS_INTERVAL_SECONDS"]
@@ -369,12 +257,6 @@ def game():
         # Update all TNTs
         for tnt in tnt_list:
             tnt.update(tnt_list, explosions, camera)
-
-        # Poll Instagram Live comments
-        if live_comment_id is not None and current_time - last_ig_poll >= ig_poll_interval:
-            print("Polling Instagram Live comments...")
-            last_ig_poll = current_time
-            asyncio.run_coroutine_threadsafe(handle_instagram_poll(), asyncio_loop)
 
         # Process chat queues
         if config["CHAT_CONTROL"] and current_time - last_queues_pop >= queues_pop_interval:
