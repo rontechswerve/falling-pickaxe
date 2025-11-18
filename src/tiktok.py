@@ -90,6 +90,7 @@ class TikTokChatBridge:
         self._last_comment_time: Optional[float] = None
         self._last_gift_time: Optional[float] = None
         self._auto_reconnect = auto_reconnect
+        self._backoff_attempts: int = 0
         self._seen_comment_ids: _SeenCache = _SeenCache()
         self._seen_gift_ids: _SeenCache = _SeenCache()
         self._seen_like_ids: _SeenCache = _SeenCache()
@@ -107,6 +108,7 @@ class TikTokChatBridge:
 
         @self.client.on(ConnectEvent)
         async def _on_connect(_: ConnectEvent) -> None:
+            self._backoff_attempts = 0
             logger.info("Connected to TikTok Live as %s (room %s)", self.unique_id, self.client.room_id)
             logger.debug("Connection details: state=%s room_info=%s", getattr(self.client, "connected", None), getattr(self.client, "room_info", None))
 
@@ -306,6 +308,11 @@ class TikTokChatBridge:
                 logger.warning("TikTokLive client reported an existing connection; resetting client before retry")
                 self._reset_client()
                 self._schedule_restart("recover from duplicate connection")
+            elif exc.__class__.__name__ == "SignAPIError" or "SIGN_NOT_200" in str(exc):
+                delay = self._next_backoff_delay()
+                logger.error("TikTokLive Sign API error; retrying in %ds: %s", delay, exc, exc_info=exc)
+                self._reset_client()
+                self._schedule_restart("sign api error", delay_seconds=delay)
             else:
                 logger.error("TikTokLive client stopped with error: %s", exc, exc_info=exc)
                 self._reset_client()
@@ -331,6 +338,13 @@ class TikTokChatBridge:
             self._start_client()
 
         self._loop.call_later(delay_seconds, _do_restart)
+
+    def _next_backoff_delay(self, base_seconds: int = 5, max_seconds: int = 60) -> int:
+        """Return the next exponential backoff delay for reconnect attempts."""
+
+        self._backoff_attempts += 1
+        delay = base_seconds * (2 ** (self._backoff_attempts - 1))
+        return min(delay, max_seconds)
 
     def _reset_client(self) -> None:
         """Dispose of the current client and create a fresh one before reconnecting."""
