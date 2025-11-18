@@ -45,7 +45,7 @@ class _SeenCache:
 if TYPE_CHECKING:  # pragma: no cover - import only for type checkers
     from TikTokLive.client.client import TikTokLiveClient
     from TikTokLive.client.logger import LogLevel
-    from TikTokLive.events import CommentEvent, ConnectEvent, GiftEvent
+    from TikTokLive.events import CommentEvent, ConnectEvent, GiftEvent, LikeEvent
 
 
 class TikTokChatBridge:
@@ -68,6 +68,7 @@ class TikTokChatBridge:
             CommentEvent,
             ConnectEvent,
             GiftEvent,
+            LikeEvent,
             DisconnectEvent,
             LiveEndEvent,
             LogLevel,
@@ -91,15 +92,17 @@ class TikTokChatBridge:
         self._auto_reconnect = auto_reconnect
         self._seen_comment_ids: _SeenCache = _SeenCache()
         self._seen_gift_ids: _SeenCache = _SeenCache()
+        self._seen_like_ids: _SeenCache = _SeenCache()
+        self._like_counters: Dict[str, int] = {}
         # Surface the TikTokLive client's own debug logs for troubleshooting.
         try:
             self.client.logger.setLevel(LogLevel.DEBUG.value)
         except Exception:
             self.client.logger.setLevel(logging.DEBUG)
         logger.debug("TikTokLive client created for @%s", unique_id)
-        self._register_handlers(CommentEvent, ConnectEvent, GiftEvent, DisconnectEvent, LiveEndEvent)
+        self._register_handlers(CommentEvent, ConnectEvent, GiftEvent, LikeEvent, DisconnectEvent, LiveEndEvent)
 
-    def _register_handlers(self, CommentEvent, ConnectEvent, GiftEvent, DisconnectEvent, LiveEndEvent) -> None:
+    def _register_handlers(self, CommentEvent, ConnectEvent, GiftEvent, LikeEvent, DisconnectEvent, LiveEndEvent) -> None:
         logger.debug("Registering TikTokLive handlers for connect/comment/gift events")
 
         @self.client.on(ConnectEvent)
@@ -220,11 +223,52 @@ class TikTokChatBridge:
             logger.debug("Superchat queue size now %d", len(self.superchat_queue))
             self.superchat_queue.append(payload)
 
+        async def _handle_like(event) -> None:  # type: ignore[no-untyped-def]
+            if LikeEvent is None:
+                return
+
+            logger.debug("Received TikTok like event: %s", event)
+            like_key = _event_key(event)
+            if like_key and not self._seen_like_ids.add(like_key):
+                logger.debug("Skipping duplicate like with key %s", like_key)
+                return
+
+            display_name = _display_name(event)
+            author_id = _author_id(event)
+            profile_image_url = _extract_avatar(event)
+            raw_like_count = getattr(event, "likeCount", None) or getattr(event, "like_count", None) or 1
+            try:
+                like_count = int(raw_like_count)
+            except Exception:
+                like_count = 1
+
+            self._like_counters[author_id] = self._like_counters.get(author_id, 0) + max(like_count, 1)
+            bundles = self._like_counters[author_id] // 5
+            self._like_counters[author_id] %= 5
+
+            if bundles <= 0:
+                return
+
+            for _ in range(bundles):
+                payload = {
+                    "author_id": author_id,
+                    "display_name": display_name,
+                    "message": "Likes x5",
+                    "profile_image_url": profile_image_url,
+                    "highlight": "megatnt",
+                }
+                self.mega_tnt_queue.append(payload)
+                logger.info("Added MegaTNT for %s after 5 likes", display_name)
+                logger.debug("MegaTNT queue size now %d", len(self.mega_tnt_queue))
+
         # Register both typed and string-based listeners so we catch proto and string events.
         self.client.add_listener(CommentEvent, _handle_comment)
         self.client.add_listener("comment", _handle_comment)
         self.client.add_listener(GiftEvent, _handle_gift)
         self.client.add_listener("gift", _handle_gift)
+        if LikeEvent is not None:
+            self.client.add_listener(LikeEvent, _handle_like)
+        self.client.add_listener("like", _handle_like)
 
     def start(self, loop: asyncio.AbstractEventLoop) -> None:
         logger.debug("Starting TikTokLive client for @%s in background loop", self.unique_id)
@@ -301,6 +345,7 @@ class TikTokChatBridge:
             CommentEvent,
             ConnectEvent,
             GiftEvent,
+            LikeEvent,
             DisconnectEvent,
             LiveEndEvent,
             LogLevel,
@@ -312,7 +357,7 @@ class TikTokChatBridge:
         except Exception:
             self.client.logger.setLevel(logging.DEBUG)
 
-        self._register_handlers(CommentEvent, ConnectEvent, GiftEvent, DisconnectEvent, LiveEndEvent)
+        self._register_handlers(CommentEvent, ConnectEvent, GiftEvent, LikeEvent, DisconnectEvent, LiveEndEvent)
 
     async def _log_health(self) -> None:
         """Periodically log connection state and queue sizes while running."""
@@ -452,7 +497,7 @@ def _author_id(event: object) -> str:
     return _display_name(event)
 
 
-def _load_tiktoklive() -> Tuple[object, object, object, object, Optional[object], Optional[object], object]:
+def _load_tiktoklive() -> Tuple[object, object, object, object, Optional[object], Optional[object], Optional[object], object]:
     """Import TikTokLive lazily so Python 3.9 users see a friendly message."""
 
     if sys.version_info < (3, 10):
@@ -472,12 +517,14 @@ def _load_tiktoklive() -> Tuple[object, object, object, object, Optional[object]
         GiftEvent = getattr(events_module, "GiftEvent")
         DisconnectEvent = getattr(events_module, "DisconnectEvent", None)
         LiveEndEvent = getattr(events_module, "LiveEndEvent", None)
+        LikeEvent = getattr(events_module, "LikeEvent", None)
         LogLevel = getattr(logger_module, "LogLevel")
         return (
             TikTokLiveClient,
             CommentEvent,
             ConnectEvent,
             GiftEvent,
+            LikeEvent,
             DisconnectEvent,
             LiveEndEvent,
             LogLevel,
