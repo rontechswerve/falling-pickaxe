@@ -212,18 +212,58 @@ class TikTokChatBridge:
             except Exception:
                 gift_name = getattr(event.gift, "name", None)
 
+            raw_quantity = (
+                getattr(event, "repeat_count", None)
+                or getattr(event, "count", None)
+                or getattr(event.gift, "repeat_count", None)
+                or getattr(event.gift, "count", None)
+            )
+            try:
+                quantity = max(int(raw_quantity), 1) if raw_quantity is not None else 1
+            except Exception:
+                quantity = 1
+
+            raw_coins = getattr(event.gift, "diamond_count", None) or getattr(event, "diamond_count", None)
+            try:
+                coin_value = int(raw_coins) if raw_coins is not None else None
+            except Exception:
+                coin_value = None
+
             message = f"Gift: {gift_name or 'TikTok gift'}"
-            payload = {
+            base_payload = {
                 "author_id": author_id,
                 "display_name": display_name,
                 "message": message,
                 "profile_image_url": profile_image_url,
-                "highlight": "megatnt",
             }
+
+            tnt_to_enqueue = 0
+            mega_to_enqueue = 0
+
+            if coin_value is not None and coin_value > 50:
+                mega_to_enqueue = 10
+                logger.info("%s gifted >50 coins; queueing %d MegaTNT", display_name, mega_to_enqueue)
+            elif quantity > 1:
+                tnt_to_enqueue = 5
+                mega_to_enqueue = 5
+                logger.info(
+                    "%s gifted multiple items (x%s); queueing %d TNT and %d MegaTNT", display_name, quantity, tnt_to_enqueue, mega_to_enqueue
+                )
+            else:
+                tnt_to_enqueue = 10
+                logger.info("%s gifted once; queueing %d TNT", display_name, tnt_to_enqueue)
+
+            for _ in range(tnt_to_enqueue):
+                self.tnt_queue.append({**base_payload, "highlight": "tnt"})
+            if tnt_to_enqueue:
+                logger.debug("TNT queue size now %d", len(self.tnt_queue))
+
+            for _ in range(mega_to_enqueue):
+                self.mega_tnt_queue.append({**base_payload, "highlight": "megatnt"})
+            if mega_to_enqueue:
+                logger.debug("MegaTNT queue size now %d", len(self.mega_tnt_queue))
+
             print(f"TikTok gift from {display_name}: {gift_name or 'TikTok gift'}")
-            logger.info("Added %s to Superchat MegaTNT queue (gift)", display_name)
-            logger.debug("Superchat queue size now %d", len(self.superchat_queue))
-            self.superchat_queue.append(payload)
 
         async def _handle_like(event) -> None:  # type: ignore[no-untyped-def]
             if LikeEvent is None:
