@@ -263,14 +263,12 @@ class TikTokChatBridge:
                 tnt_to_enqueue = 10
                 logger.info("%s gifted once; queueing %d TNT", display_name, tnt_to_enqueue)
 
-            for _ in range(tnt_to_enqueue):
-                self.tnt_queue.append({**base_payload, "highlight": "tnt"})
             if tnt_to_enqueue:
+                self.tnt_queue.append({**base_payload, "highlight": "tnt", "count": tnt_to_enqueue})
                 logger.debug("TNT queue size now %d", len(self.tnt_queue))
 
-            for _ in range(mega_to_enqueue):
-                self.mega_tnt_queue.append({**base_payload, "highlight": "megatnt"})
             if mega_to_enqueue:
+                self.mega_tnt_queue.append({**base_payload, "highlight": "megatnt", "count": mega_to_enqueue})
                 logger.debug("MegaTNT queue size now %d", len(self.mega_tnt_queue))
 
             print(f"TikTok gift from {display_name}: {gift_name or 'TikTok gift'}")

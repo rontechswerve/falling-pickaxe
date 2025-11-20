@@ -281,23 +281,25 @@ def game():
             if tnt_queue:
                 chat_info = tnt_queue.pop(0)
                 author = chat_info["display_name"]
+                count = max(int(chat_info.get("count", 1)), 1)
                 print(f"Spawning TNT for {author} (chat message)")
-                new_tnt = Tnt(
-                    space,
-                    pickaxe.body.position.x,
-                    pickaxe.body.position.y - 100,
-                    texture_atlas,
-                    atlas_items,
-                    sound_manager,
-                    owner_display_name=author,
-                    owner_message=chat_info.get("message"),
-                    profile_image_url=chat_info.get("profile_image_url"),
-                    owner_id=chat_info.get("author_id"),
-                    leaderboard=hud,
-                )
+                for _ in range(count):
+                    new_tnt = Tnt(
+                        space,
+                        pickaxe.body.position.x,
+                        pickaxe.body.position.y - 100,
+                        texture_atlas,
+                        atlas_items,
+                        sound_manager,
+                        owner_display_name=author,
+                        owner_message=chat_info.get("message"),
+                        profile_image_url=chat_info.get("profile_image_url"),
+                        owner_id=chat_info.get("author_id"),
+                        leaderboard=hud,
+                    )
+                    tnt_list.append(new_tnt)
                 if chat_info.get("highlight"):
                     hud.mark_command_trigger(chat_info["highlight"])
-                tnt_list.append(new_tnt)
                 last_tnt_spawn = current_time
 
             # Handle MegaTNT (New Subscriber)
@@ -309,30 +311,33 @@ def game():
                     profile_image_url = author.get("profile_image_url")
                     author_id = author.get("author_id")
                     highlight = author.get("highlight")
+                    count = max(int(author.get("count", 1)), 1)
                 else:
                     display_name = author
                     message = None
                     profile_image_url = None
                     author_id = str(author)
                     highlight = "megatnt"
+                    count = 1
 
                 print(f"Spawning MegaTNT for {display_name} (queue)")
-                new_megatnt = MegaTnt(
-                    space,
-                    pickaxe.body.position.x,
-                    pickaxe.body.position.y - 100,
-                    texture_atlas,
-                    atlas_items,
-                    sound_manager,
-                    owner_display_name=display_name,
-                    owner_message=message,
-                    profile_image_url=profile_image_url,
-                    owner_id=author_id,
-                    leaderboard=hud,
-                )
+                for _ in range(count):
+                    new_megatnt = MegaTnt(
+                        space,
+                        pickaxe.body.position.x,
+                        pickaxe.body.position.y - 100,
+                        texture_atlas,
+                        atlas_items,
+                        sound_manager,
+                        owner_display_name=display_name,
+                        owner_message=message,
+                        profile_image_url=profile_image_url,
+                        owner_id=author_id,
+                        leaderboard=hud,
+                    )
+                    tnt_list.append(new_megatnt)
                 if highlight:
                     hud.mark_command_trigger(highlight)
-                tnt_list.append(new_megatnt)
                 last_tnt_spawn = current_time
 
             # Handle Superchat/Supersticker TNT
