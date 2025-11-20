@@ -240,9 +240,19 @@ class TikTokChatBridge:
             tnt_to_enqueue = 0
             mega_to_enqueue = 0
 
-            if coin_value is not None and coin_value > 50:
-                mega_to_enqueue = 10
-                logger.info("%s gifted >50 coins; queueing %d MegaTNT", display_name, mega_to_enqueue)
+            if coin_value is not None:
+                if coin_value > 50:
+                    mega_to_enqueue = 10
+                    logger.info("%s gifted >50 coins; queueing %d MegaTNT", display_name, mega_to_enqueue)
+                elif coin_value > 1:
+                    tnt_to_enqueue = 5
+                    mega_to_enqueue = 5
+                    logger.info(
+                        "%s gifted >1 coin; queueing %d TNT and %d MegaTNT", display_name, tnt_to_enqueue, mega_to_enqueue
+                    )
+                else:
+                    tnt_to_enqueue = 10
+                    logger.info("%s gifted 1 coin; queueing %d TNT", display_name, tnt_to_enqueue)
             elif quantity > 1:
                 tnt_to_enqueue = 5
                 mega_to_enqueue = 5
