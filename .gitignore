@@ -174,13 +174,16 @@ cython_debug/
 .pypirc
 
 
-# Config with credentials 
+# Config with credentials
 config.json
 
-# Ignore logs 
+# Ignore logs
 logs/*
 
 .DS_Store
 
 # User-specific files
 .vs
+
+# Local rainbow pickaxe asset (kept out of repo to avoid binary blocks)
+src/assets/pickaxe/rainbow_pickaxe.png
