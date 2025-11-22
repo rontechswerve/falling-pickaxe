@@ -69,8 +69,8 @@ class Tnt:
 
         # Owner info (nick from chat)
         self.owner_id = owner_id
-        self.owner_display_name = owner_display_name or owner_name
-        self.owner_message = owner_message
+        self.owner_display_name = self._normalize_text(owner_display_name or owner_name, default="Unknown")
+        self.owner_message = self._normalize_text(owner_message, default=None)
         self.profile_image_url = profile_image_url
         self.profile_image_surface = self._load_profile_image(profile_image_url)
         self.name_font = pygame.font.Font(None, 48)
@@ -189,12 +189,11 @@ class Tnt:
         if self.profile_image_surface:
             avatar_width, avatar_height = self.profile_image_surface.get_size()
 
-        name_text = self.owner_display_name or ""
-        name_surface = self.name_font.render(name_text, True, (255, 255, 255))
+        name_surface = self._safe_render(self.name_font, self.owner_display_name, "Player")
 
         message_surface = None
         if self.owner_message:
-            message_surface = self.message_font.render(self.owner_message, True, (255, 255, 255))
+            message_surface = self._safe_render(self.message_font, self.owner_message, None)
 
         text_width = max(name_surface.get_width(), message_surface.get_width() if message_surface else 0)
         text_height = name_surface.get_height() + (message_surface.get_height() if message_surface else 0)
@@ -222,6 +221,32 @@ class Tnt:
         overlay_rect.x -= camera.offset_x
         overlay_rect.y -= camera.offset_y
         screen.blit(overlay_surface, overlay_rect)
+
+    @staticmethod
+    def _normalize_text(value, default=""):
+        if value is None:
+            return default
+        text = str(value).strip()
+        return text if text else default
+
+    @staticmethod
+    def _safe_render(font, text, fallback):
+        """Render text, falling back when the string is empty or has zero width."""
+        # Normalize first to avoid zero-width strings such as variation selectors.
+        normalized = Tnt._normalize_text(text, fallback or "")
+
+        if not normalized and fallback is None:
+            return None
+
+        try:
+            surface = font.render(normalized or fallback or "", True, (255, 255, 255))
+            if surface.get_width() == 0 and fallback is not None:
+                surface = font.render(str(fallback), True, (255, 255, 255))
+            return surface
+        except Exception:
+            if fallback is None:
+                return None
+            return font.render(str(fallback), True, (255, 255, 255))
 
 class MegaTnt(Tnt):
     def __init__(

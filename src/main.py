@@ -50,6 +50,14 @@ big_queue = []
 pickaxe_queue = []
 mega_tnt_queue = []
 
+
+def _pop_prioritized(queue):
+    """Pop the first gift-priority entry if present, otherwise FIFO."""
+    for idx, item in enumerate(queue):
+        if isinstance(item, dict) and item.get("priority") == "gift":
+            return queue.pop(idx)
+    return queue.pop(0)
+
 def start_event_loop(loop):
     asyncio.set_event_loop(loop)
     loop.run_forever()
@@ -279,60 +287,65 @@ def game():
 
             # Handle regular TNT from chat command
             if tnt_queue:
-                chat_info = tnt_queue.pop(0)
+                chat_info = _pop_prioritized(tnt_queue)
                 author = chat_info["display_name"]
+                count = max(int(chat_info.get("count", 1)), 1)
                 print(f"Spawning TNT for {author} (chat message)")
-                new_tnt = Tnt(
-                    space,
-                    pickaxe.body.position.x,
-                    pickaxe.body.position.y - 100,
-                    texture_atlas,
-                    atlas_items,
-                    sound_manager,
-                    owner_display_name=author,
-                    owner_message=chat_info.get("message"),
-                    profile_image_url=chat_info.get("profile_image_url"),
-                    owner_id=chat_info.get("author_id"),
-                    leaderboard=hud,
-                )
+                for _ in range(count):
+                    new_tnt = Tnt(
+                        space,
+                        pickaxe.body.position.x,
+                        pickaxe.body.position.y - 100,
+                        texture_atlas,
+                        atlas_items,
+                        sound_manager,
+                        owner_display_name=author,
+                        owner_message=chat_info.get("message"),
+                        profile_image_url=chat_info.get("profile_image_url"),
+                        owner_id=chat_info.get("author_id"),
+                        leaderboard=hud,
+                    )
+                    tnt_list.append(new_tnt)
                 if chat_info.get("highlight"):
                     hud.mark_command_trigger(chat_info["highlight"])
-                tnt_list.append(new_tnt)
                 last_tnt_spawn = current_time
 
             # Handle MegaTNT (New Subscriber)
             if mega_tnt_queue:
-                author = mega_tnt_queue.pop(0)
+                author = _pop_prioritized(mega_tnt_queue)
                 if isinstance(author, dict):
                     display_name = author.get("display_name", "New Subscriber")
                     message = author.get("message")
                     profile_image_url = author.get("profile_image_url")
                     author_id = author.get("author_id")
                     highlight = author.get("highlight")
+                    count = max(int(author.get("count", 1)), 1)
                 else:
                     display_name = author
                     message = None
                     profile_image_url = None
                     author_id = str(author)
                     highlight = "megatnt"
+                    count = 1
 
                 print(f"Spawning MegaTNT for {display_name} (queue)")
-                new_megatnt = MegaTnt(
-                    space,
-                    pickaxe.body.position.x,
-                    pickaxe.body.position.y - 100,
-                    texture_atlas,
-                    atlas_items,
-                    sound_manager,
-                    owner_display_name=display_name,
-                    owner_message=message,
-                    profile_image_url=profile_image_url,
-                    owner_id=author_id,
-                    leaderboard=hud,
-                )
+                for _ in range(count):
+                    new_megatnt = MegaTnt(
+                        space,
+                        pickaxe.body.position.x,
+                        pickaxe.body.position.y - 100,
+                        texture_atlas,
+                        atlas_items,
+                        sound_manager,
+                        owner_display_name=display_name,
+                        owner_message=message,
+                        profile_image_url=profile_image_url,
+                        owner_id=author_id,
+                        leaderboard=hud,
+                    )
+                    tnt_list.append(new_megatnt)
                 if highlight:
                     hud.mark_command_trigger(highlight)
-                tnt_list.append(new_megatnt)
                 last_tnt_spawn = current_time
 
             # Handle Superchat/Supersticker TNT
