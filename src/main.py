@@ -50,6 +50,14 @@ big_queue = []
 pickaxe_queue = []
 mega_tnt_queue = []
 
+
+def _pop_prioritized(queue):
+    """Pop the first gift-priority entry if present, otherwise FIFO."""
+    for idx, item in enumerate(queue):
+        if isinstance(item, dict) and item.get("priority") == "gift":
+            return queue.pop(idx)
+    return queue.pop(0)
+
 def start_event_loop(loop):
     asyncio.set_event_loop(loop)
     loop.run_forever()
@@ -279,7 +287,7 @@ def game():
 
             # Handle regular TNT from chat command
             if tnt_queue:
-                chat_info = tnt_queue.pop(0)
+                chat_info = _pop_prioritized(tnt_queue)
                 author = chat_info["display_name"]
                 count = max(int(chat_info.get("count", 1)), 1)
                 print(f"Spawning TNT for {author} (chat message)")
@@ -304,7 +312,7 @@ def game():
 
             # Handle MegaTNT (New Subscriber)
             if mega_tnt_queue:
-                author = mega_tnt_queue.pop(0)
+                author = _pop_prioritized(mega_tnt_queue)
                 if isinstance(author, dict):
                     display_name = author.get("display_name", "New Subscriber")
                     message = author.get("message")

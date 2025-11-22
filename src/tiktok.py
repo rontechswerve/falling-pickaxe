@@ -235,6 +235,7 @@ class TikTokChatBridge:
                 "display_name": display_name,
                 "message": message,
                 "profile_image_url": profile_image_url,
+                "priority": "gift",
             }
 
             tnt_to_enqueue = 0
