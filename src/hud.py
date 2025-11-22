@@ -61,6 +61,7 @@ class Hud:
             {"key": "iron", "label": "Iron"},
             {"key": "stone", "label": "Stone"},
             {"key": "wood", "label": "Wood"},
+            {"key": "rainbow", "label": "Rainbow"},
             {"key": "big", "label": "Big"},
             {"key": "fast", "label": "Fast"},
             {"key": "slow", "label": "Slow"},

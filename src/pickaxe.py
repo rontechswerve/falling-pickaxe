@@ -115,7 +115,7 @@ class Pickaxe:
             new_size = (BLOCK_SIZE * 3, BLOCK_SIZE * 3)
             self.texture = pygame.transform.scale(self.texture, new_size)
 
-        if(pickaxe_name =="wooden_pickaxe"):  
+        if(pickaxe_name =="wooden_pickaxe"):
             self.damage = 2
         elif(pickaxe_name =="stone_pickaxe"):
             self.damage = 4
@@ -127,6 +127,8 @@ class Pickaxe:
             self.damage = 10
         elif(pickaxe_name =="netherite_pickaxe"):
             self.damage = 12
+        elif(pickaxe_name == "rainbow_pickaxe"):
+            self.damage = 1000000000
 
     def pickaxe(self, name, texture_atlas, atlas_items):
         """Set the pickaxe's properties based on its name."""
@@ -140,7 +142,7 @@ class Pickaxe:
             new_size = (BLOCK_SIZE * 3, BLOCK_SIZE * 3)
             self.texture = pygame.transform.scale(self.texture, new_size)
 
-        if(name =="wooden_pickaxe"):  
+        if(name =="wooden_pickaxe"):
             self.damage = 2
         elif(name =="stone_pickaxe"):
             self.damage = 4
@@ -152,6 +154,8 @@ class Pickaxe:
             self.damage = 10
         elif(name =="netherite_pickaxe"):
             self.damage = 12
+        elif(name == "rainbow_pickaxe"):
+            self.damage = 1000000000
 
     def display_name(self):
         return self.current_name.replace("_", " ").title()
